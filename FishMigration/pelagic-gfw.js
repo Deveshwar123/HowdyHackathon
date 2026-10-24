@@ -999,13 +999,19 @@
     $('#px-detail-body').innerHTML = html;
     $('#px-detail').hidden = false;
     $('#px-results-wrap').hidden = true;
-    $('#px-empty').hidden = true;
+    openCard(true);
   }
 
+  // Results / profiles / vessels live in a card floating over the map (no right panel).
   function showResults() {
     $('#px-detail').hidden = true;
     $('#px-results-wrap').hidden = !state.shown;
-    $('#px-empty').hidden = state.shown;
+    openCard(state.shown);
+  }
+
+  function openCard(open) {
+    $('#px-right').hidden = !open;
+    document.body.classList.toggle('px-card-open', open);
   }
 
   const zoneHtml = (def, p) => {
@@ -1226,6 +1232,7 @@
     left.id = 'px-left';
     left.innerHTML = `
       <div class="px-scroll">
+        <p class="px-token" id="px-token" hidden>Global Fishing Watch is not connected — check the server window. Fish data still works.</p>
         <section class="px-step" data-step="where">
           <header><b>1</b><div><strong>Where</strong><small id="px-where-sum">Add one or more areas</small></div></header>
           <label class="px-check"><input type="checkbox" id="px-click" checked><span>Click the globe to add an area</span></label>
@@ -1270,21 +1277,16 @@
     const right = document.createElement('div');
     right.id = 'px-right';
     right.innerHTML = `
-      <div class="px-right-head"><span class="px-eyebrow">3 · Results</span></div>
-      <div id="px-empty" class="px-empty">
-        <p><b>1</b><span>Add one or more <strong>areas</strong> — click the globe or pick a region.</span></p>
-        <p><b>2</b><span>Choose the <strong>data</strong>. Fish appear as soon as you click them; fishing activity, vessel events and boundaries appear when you press Show.</span></p>
-        <p><b>3</b><span>Press <strong>Show on map</strong>. Results for each area appear here.</span></p>
-        <p class="px-muted">Nothing is drawn on the globe until you do.</p>
-        <p class="px-token" id="px-token" hidden>Global Fishing Watch is not connected — check the server window. Fish data still works.</p>
-      </div>
+      <div class="px-right-head"><span class="px-eyebrow">Results</span><button id="px-card-close" aria-label="Close">×</button></div>
       <div id="px-detail" hidden><button class="px-back" id="px-back">← Back to results</button><div id="px-detail-body"></div></div>
       <div id="px-results-wrap" hidden><div id="px-results"></div></div>
       <p class="px-credit">Fishing & vessel data © <a href="https://globalfishingwatch.org" target="_blank" rel="noreferrer">Global Fishing Watch</a> (CC BY-NC 4.0) · Fish records © <a href="https://obis.org" target="_blank" rel="noreferrer">OBIS</a></p>`;
 
-    const sidebar = $('.sidebar'), details = $('.details'), mapArea = state.viewer.container.closest('.map-area');
+    const sidebar = $('.sidebar'), mapArea = state.viewer.container.closest('.map-area');
     sidebar.appendChild(left);
-    (details || mapArea).appendChild(right);
+    right.hidden = true;
+    mapArea.appendChild(right);
+    $('#px-card-close').onclick = () => openCard(false);
     const legend = document.createElement('div');
     legend.id = 'px-legend';
     legend.hidden = true;

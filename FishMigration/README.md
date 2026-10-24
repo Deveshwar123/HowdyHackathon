@@ -16,7 +16,7 @@ Nothing is drawn on the globe until you ask for it, and then only inside the are
 2. **What** (left panel) — tick the data and set the dates:
    - **Fish (OBIS):** every fish species recorded in your areas (listed automatically), the 64
      field-guide species and groups, or any other species/genus/family. **One click on a fish**
-     puts it on the map, highlights it in the list and opens its profile on the right — no need
+     puts it on the map, highlights it in the list and opens its profile in a card on the map — no need
      to press Show. Click another fish to switch; untick to remove it.
      **Select all fish recorded in your areas** (under the instructions) ticks every species in
      the list, or only those matching the filter; untick it to clear them.
@@ -25,9 +25,11 @@ Nothing is drawn on the globe until you ask for it, and then only inside the are
    - **Vessel events (GFW Events):** fishing, encounters (possible transshipment), loitering, port
      visits, AIS gaps.
    - **Boundaries (GFW):** marine protected areas, EEZs, high seas, tuna RFMOs.
-3. **Show on map** — the right panel shows one card per area with only what you ticked: record
+3. **Show on map** — a results card on the map shows one section per area with only what you ticked: record
    counts, fishing hours by flag and gear, top vessels, traffic by type, likely dark vessels, event
-   counts. A legend on the map lists what is drawn.
+   counts. A legend on the map lists what is drawn. There is no right-hand panel: the map uses the
+   full width, and the results card (top-right of the map) opens when there is something to show and
+   closes with ×.
 
 The map switcher (bottom-right) picks **Satellite** (Esri World Imagery, high resolution), **Ocean**
 (seafloor bathymetry) or **Simple**, with optional labels.

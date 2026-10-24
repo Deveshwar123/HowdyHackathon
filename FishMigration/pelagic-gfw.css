@@ -2,7 +2,6 @@
 
 /* The explorer replaces the atlas's own sidebar, details panel and map chrome. */
 body.px-on .sidebar > :not(#px-left),
-body.px-on .details > :not(#px-right),
 body.px-on .map-top,
 body.px-on .map-bottom,
 body.px-on .timeline,
@@ -11,12 +10,18 @@ body.px-on .record-popup,
 body.px-on .instructions,
 body.px-on header nav { display: none !important; }
 body.px-on .sidebar { overflow: hidden; }
-body.px-on .details { overflow: hidden; }
+/* No right panel: the map takes its width; results float over the map in a card. */
+body.px-on .details { display: none !important; }
+body.px-on .workspace { grid-template-columns: 310px minmax(0, 1fr); }
+@media (min-width: 1600px) { body.px-on .workspace { grid-template-columns: 330px minmax(0, 1fr); } }
+@media (max-width: 1100px) { body.px-on .workspace { grid-template-columns: 275px minmax(0, 1fr); } }
 
 #px-left [hidden], #px-right [hidden], #px-legend[hidden], #px-hint[hidden] { display: none !important; }
 #px-left, #px-right { display: flex; flex-direction: column; height: 100%; min-height: 0; color: #151515; font-size: 12px; }
+#px-right[hidden] { display: none; }
 #px-left .px-scroll { flex: 1; overflow: auto; min-height: 0; }
-#px-right { overflow: auto; padding: 0 18px 18px; }
+#px-right { position: absolute; top: 64px; right: 16px; z-index: 3; width: 330px; height: auto; max-height: calc(100% - 136px); overflow: auto; padding: 0 16px 14px; background: #fff; border: 1px solid #bbb; border-radius: 3px; box-shadow: 0 3px 14px #0003; }
+body.px-card-open .map-controls { right: 362px; }
 
 .px-muted { color: #777; font-size: 11px; line-height: 1.5; margin: 6px 0; }
 .px-eyebrow { color: #666; letter-spacing: .6px; font-size: 10px; text-transform: uppercase; font-weight: 600; }
@@ -75,10 +80,10 @@ body.px-on .details { overflow: hidden; }
 .px-ghost { border: 1px solid #ccc; border-radius: 3px; padding: 10px 12px; font-size: 12px; }
 
 /* Results */
-.px-right-head { position: sticky; top: 0; background: #fff; padding: 16px 0 6px; z-index: 1; border-bottom: 1px solid #eee; }
-.px-empty { padding-top: 12px; }
-.px-empty p { display: flex; gap: 10px; line-height: 1.5; color: #333; }
-.px-empty b { width: 20px; height: 20px; border-radius: 50%; border: 1px solid #111; display: grid; place-items: center; font-size: 10px; flex: none; }
+.px-right-head { position: sticky; top: 0; background: #fff; padding: 12px 0 6px; z-index: 1; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.px-right-head button { font-size: 18px; color: #777; line-height: 1; padding: 0 2px; }
+.px-right-head button:hover { color: #111; }
+#px-left .px-token { margin: 12px 20px 0; }
 .px-token { background: #fff4e5; border: 1px solid #f0c890; padding: 8px 10px; font-size: 11px; }
 .px-period { color: #666; font-size: 11px; margin: 10px 0; }
 .px-card { border: 1px solid #ddd; border-top: 4px solid var(--area); border-radius: 3px; padding: 12px; margin-bottom: 12px; }
@@ -201,7 +206,8 @@ body.px-on .details { overflow: hidden; }
 .px-selectall:has(input:disabled) { opacity: .55; cursor: not-allowed; }
 
 @media (max-width: 880px) {
-  body.px-on .details { display: block; }
-  #px-right { height: auto; }
+  body.px-on .workspace { grid-template-columns: 275px minmax(0, 1fr); }
+  #px-right { width: auto; left: 16px; }
+  body.px-card-open .map-controls { right: 20px; }
   #px-hint { white-space: normal; text-align: center; }
 }
