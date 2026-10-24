@@ -24,7 +24,7 @@ sway). The chapter dots (right) and the *Leaderboard* / *Back to the globe* butt
 - Earth textures: NASA Blue Marble / Black Marble via the `three-globe` examples.
 - Satellite imagery: Copernicus Sentinel-2 L2A (2025-04-10, tile 14RQU), from the AWS Open Data
   `sentinel-cogs` bucket. Contains modified Copernicus Sentinel data 2025.
-- Fish: *Barramundi Fish* from the Khronos glTF Sample Assets (CC0).
+- Fish: *Barramundi Fish* from the Khronos glTF Sample Assets (CC0), as glTF in `assets/fish/`.
 - Water normal map: three.js examples (`waternormals.jpg`, MIT).
 - Lake photo: supplied by the team.
 

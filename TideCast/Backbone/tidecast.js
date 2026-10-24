@@ -707,7 +707,7 @@ const TRAIL = 46;
 const tagLayer = document.createElement('div');
 overlay.appendChild(tagLayer);
 
-new GLTFLoader().load('assets/fish.glb', (gltf) => {
+new GLTFLoader().load('assets/fish/fish.json', (gltf) => {
   let base = null;
   gltf.scene.traverse((o) => { if (o.isMesh && !base) base = o; });
   if (!base) return;
