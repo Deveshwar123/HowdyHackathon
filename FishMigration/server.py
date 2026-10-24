@@ -20,17 +20,19 @@ The GFW token is read from the GFW_TOKEN environment variable, or from a
 import json
 import os
 import re
+import socket
 import sys
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from collections import OrderedDict
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-PORT = int(os.environ.get("PORT", "8765"))
+PORT = int(os.environ.get("PORT", "8790"))
 OBIS = os.environ.get("OBIS_URL", "https://api.obis.org/v3")
 GFW = os.environ.get("GFW_URL", "https://gateway.api.globalfishingwatch.org/v3")
 PHOTON = os.environ.get("PHOTON_URL", "https://photon.komoot.io/api/")
@@ -256,9 +258,31 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_bytes(status, ctype, data, cache_seconds=3600 if status == 200 else 0)
 
 
+def port_in_use(port):
+    """True if anything answers on this port over IPv4 or IPv6 (macOS lets two
+    servers share a port across the two, so "localhost" can reach the wrong app)."""
+    for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as s:
+                s.settimeout(0.3)
+                if s.connect_ex((host, port)) == 0:
+                    return True
+        except OSError:  # e.g. no IPv6 on this machine
+            pass
+    return False
+
+
 if __name__ == "__main__":
-    print(f"Pelagic running at http://localhost:{PORT}")
+    port = PORT
+    while port_in_use(port):
+        print(f"Port {port} is already used by another app - trying {port + 1}")
+        port += 1
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    url = f"http://127.0.0.1:{port}/"
+    print(f"Pelagic running at {url}  (press Ctrl+C to stop)")
     print(f"  OBIS records per species query: {MAX_RECORDS:,}")
     print("  Global Fishing Watch: " + ("token loaded" if GFW_TOKEN else
           "no token (set GFW_TOKEN or create .env) - GFW layers disabled"))
-    ThreadingHTTPServer(("", PORT), Handler).serve_forever()
+    if not os.environ.get("NO_BROWSER"):
+        threading.Timer(0.8, webbrowser.open, [url]).start()
+    server.serve_forever()
