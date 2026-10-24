@@ -11,8 +11,10 @@ Nothing is drawn on the globe until you ask for it, and then only inside the are
    pick a region (Eastern Tropical Pacific corridor / CMAR, Gulf of Mexico, Caribbean, Coral
    Triangle, …), or search a place or `lat, lon`. Each area gets a letter and colour.
 2. **What** (left panel) — tick the data and set the dates:
-   - **Fish (OBIS):** any of the 64 field-guide species and groups, any other species/genus/family,
-     or *every fish species recorded in my areas*.
+   - **Fish (OBIS):** every fish species recorded in your areas (listed automatically), the 64
+     field-guide species and groups, or any other species/genus/family. **One click on a fish**
+     puts it on the map, highlights it in the list and opens its profile on the right — no need
+     to press Show. Click another fish to switch; untick to remove it.
    - **Fishing activity (GFW 4Wings):** fishing effort, all vessel traffic, satellite radar (SAR)
      detections that reveal vessels with AIS switched off.
    - **Vessel events (GFW Events):** fishing, encounters (possible transshipment), loitering, port
@@ -20,9 +22,9 @@ Nothing is drawn on the globe until you ask for it, and then only inside the are
    - **Boundaries (GFW):** marine protected areas, EEZs, high seas, tuna RFMOs.
 3. **Show on map** — the right panel shows one card per area with only what you ticked: record
    counts, fishing hours by flag and gear, top vessels, traffic by type, likely dark vessels, event
-   counts, and the species list (tap **+** to map one). A legend on the map lists what is drawn.
+   counts. A legend on the map lists what is drawn.
 
-Click any dot or boundary on the map for details. Click a vessel (or use **Find a vessel**) for
+Click any dot or boundary on the map for details. Click a vessel (or use **Find a vessel** in the top-right corner of the map) for
 its identity, owner, authorizations, risk insights (IUU listing, fishing in no-take MPAs, without
 RFMO authorization, AIS turned off) and its last 12 months of events drawn on the globe.
 

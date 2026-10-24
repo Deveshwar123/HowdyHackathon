@@ -56,7 +56,16 @@
     nextArea: 0,
     clickToAdd: true,
     size: 6,
-    sel: { allFish: false, species: new Set(), custom: [], heat: new Set(), events: new Set(), bounds: new Set() },
+    sel: { fish: new Map(), heat: new Set(), events: new Set(), bounds: new Set() },
+    custom: [],
+    found: null,
+    focus: null,
+    fishColors: new Map(),
+    fishStats: new Map(),
+    fishSeq: 0,
+    foundSeq: 0,
+    view: null,
+    lastRun: { heat: [], events: [], bounds: [] },
     shown: false,
     dirty: false,
     runSeq: 0,
@@ -396,6 +405,7 @@
     }
     drawAreas();
     changed();
+    areasChanged();
   }
 
   function areaAround(lon, lat, size) {
@@ -408,6 +418,7 @@
     state.areas = state.areas.filter((a) => a.id !== id);
     drawAreas();
     changed();
+    areasChanged();
   }
 
   function renderAreas() {
@@ -450,7 +461,7 @@
 
   function dataCount() {
     const s = state.sel;
-    return (s.allFish ? 1 : 0) + s.species.size + s.custom.filter((c) => c.on).length + s.heat.size + s.events.size + s.bounds.size;
+    return s.fish.size + s.heat.size + s.events.size + s.bounds.size;
   }
 
   function changed(markDirty = true) {
@@ -468,22 +479,189 @@
     renderHint();
   }
 
-  function renderSpeciesList() {
+  // ---- Fish: one selection, shared by the left list, the map and the right panel.
+  // Clicking a fish selects it (if needed), focuses it, plots it in every area and
+  // opens its profile — nothing else to confirm.
+
+  const guideFor = (sci) => species().find((sp) => sp.scientific === sci);
+
+  function fishInfo(sci) {
+    const guide = guideFor(sci);
+    if (guide) return guide;
+    const sel = state.sel.fish.get(sci);
+    return { name: (sel && sel.name) || sci, scientific: sci };
+  }
+
+  function colorFor(sci) {
+    if (!state.fishColors.has(sci)) state.fishColors.set(sci, FISH_COLORS[state.fishColors.size % FISH_COLORS.length]);
+    return state.fishColors.get(sci);
+  }
+
+  function selectFish(sci, name, record) {
+    if (!state.sel.fish.has(sci)) {
+      state.sel.fish.set(sci, { name: name || fishInfo(sci).name });
+      refreshFish();
+      changed(false);
+    }
+    focusFish(sci, record);
+  }
+
+  function unselectFish(sci) {
+    state.sel.fish.delete(sci);
+    if (state.focus === sci) state.focus = [...state.sel.fish.keys()].pop() || null;
+    refreshFish();
+    changed(false);
+    renderFishLists();
+    if (state.view && state.view.kind === 'fish') {
+      if (state.focus) focusFish(state.focus);
+      else showResults();
+    }
+  }
+
+  function focusFish(sci, record) {
+    state.focus = sci;
+    renderFishLists();
+    const row = $(`#px-left .px-fish.focus`);
+    if (row) row.scrollIntoView({ block: 'nearest' });
+    showDetail(profileHtml(sci, record));
+    state.view = { kind: 'fish', sci, record };
+  }
+
+  function updateProfile() {
+    const v = state.view;
+    if (v && v.kind === 'fish' && !$('#px-detail').hidden) $('#px-detail-body').innerHTML = profileHtml(v.sci, v.record);
+  }
+
+  const fishRow = (sci, name, note) => {
+    const on = state.sel.fish.has(sci);
+    return `<div class="px-check px-fish${on ? ' on' : ''}${state.focus === sci ? ' focus' : ''}" data-fish="${esc(sci)}" data-name="${esc(name)}" role="button" tabindex="0">
+      <input type="checkbox" ${on ? 'checked' : ''} aria-label="Show ${esc(name)} on the map">
+      <span>${esc(name)}<small>${note}</small></span>${on ? `<i class="px-swatch" style="background:${colorFor(sci)}"></i>` : ''}</div>`;
+  };
+
+  function renderFishLists() {
     const q = ($('#px-species-filter').value || '').toLowerCase();
     $('#px-species-list').innerHTML = species()
       .filter((sp) => `${sp.name} ${sp.scientific} ${sp.group}`.toLowerCase().includes(q))
-      .map((sp) => `<label class="px-check"><input type="checkbox" data-species="${esc(sp.scientific)}" ${state.sel.species.has(sp.scientific) ? 'checked' : ''}><span>${esc(sp.name)}<small>${esc(sp.scientific)} · ${esc(sp.group)}</small></span></label>`)
+      .map((sp) => fishRow(sp.scientific, sp.name, `<i>${esc(sp.scientific)}</i> · ${esc(sp.group)}`))
       .join('') || '<p class="px-muted">No match in the guide — add it below as any species.</p>';
+    $('#px-custom').innerHTML = state.custom.map((name) => fishRow(name, name, 'Added by you · OBIS')).join('');
+    const found = $('#px-found');
+    if (!state.areas.length) found.innerHTML = '<p class="px-muted">Add an area to list every fish species recorded there.</p>';
+    else if (state.found === 'loading') found.innerHTML = '<p class="px-muted">Finding every fish recorded in your areas…</p>';
+    else if (typeof state.found === 'string') found.innerHTML = `<p class="px-muted">Unavailable: ${esc(state.found)}</p>`;
+    else if (state.found) {
+      const list = state.found.filter((t) => `${t.scientificName} ${(guideFor(t.scientificName) || {}).name || ''}`.toLowerCase().includes(q));
+      found.innerHTML = list.length
+        ? list.slice(0, 80).map((t) => {
+            const guide = guideFor(t.scientificName);
+            return fishRow(t.scientificName, guide ? guide.name : t.scientificName, `${guide ? `<i>${esc(t.scientificName)}</i> · ` : ''}${fmt(t.records)} records here`);
+          }).join('')
+        : '<p class="px-muted">No fish records in OBIS for your areas.</p>';
+    }
+    $('#px-found-count').textContent = Array.isArray(state.found) ? `(${fmt(state.found.length)})` : '';
   }
 
-  function renderCustom() {
-    $('#px-custom').innerHTML = state.sel.custom.map((c, i) => `<label class="px-check"><input type="checkbox" data-custom="${i}" ${c.on ? 'checked' : ''}><span><i>${esc(c.name)}</i></span></label>`).join('');
+  function areasChanged() {
+    refreshFish();
+    loadFound();
   }
 
-  function fishSelection() {
-    const guide = species().filter((sp) => state.sel.species.has(sp.scientific)).map((sp) => ({ name: sp.name, scientific: sp.scientific }));
-    const custom = state.sel.custom.filter((c) => c.on).map((c) => ({ name: c.name, scientific: c.name }));
-    return [...guide, ...custom].map((f, i) => ({ ...f, color: FISH_COLORS[i % FISH_COLORS.length] }));
+  // Every fish species OBIS has recorded in the chosen areas, merged across areas.
+  async function loadFound() {
+    const seq = ++state.foundSeq;
+    if (!state.areas.length) {
+      state.found = null;
+      return renderFishLists();
+    }
+    state.found = 'loading';
+    renderFishLists();
+    try {
+      const counts = new Map();
+      await Promise.all(state.areas.flatMap((a) => FISH_TAXA.map(async (taxon) => {
+        const wkt = `POLYGON((${bboxPolygon(a.bbox).coordinates[0].map((p) => p.join(' ')).join(',')}))`;
+        const r = await fetch(`${OBIS}/checklist?${new URLSearchParams({ scientificname: taxon, geometry: wkt, size: 200 })}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        for (const t of (await r.json()).results || []) {
+          if ((t.taxonRank || '').toLowerCase() === 'species') counts.set(t.scientificName, (counts.get(t.scientificName) || 0) + (t.records || 0));
+        }
+      })));
+      if (seq !== state.foundSeq) return;
+      state.found = [...counts].map(([scientificName, records]) => ({ scientificName, records })).sort((x, y) => y.records - x.records);
+    } catch (err) {
+      if (seq !== state.foundSeq) return;
+      state.found = err.message;
+    }
+    renderFishLists();
+  }
+
+  // Plots every selected fish in every area (and only there).
+  function refreshFish() {
+    const seq = ++state.fishSeq;
+    const live = () => seq === state.fishSeq;
+    state.fishPoints.removeAll();
+    state.fishStats = new Map();
+    for (const [sci] of state.sel.fish) {
+      const stats = new Map();
+      state.fishStats.set(sci, stats);
+      for (const a of state.areas) {
+        fetch(`/api/observations?${new URLSearchParams({ species: sci, bbox: a.bbox.join(',') })}`)
+          .then(async (r) => {
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+            return data;
+          })
+          .then((data) => {
+            if (!live()) return;
+            let shown = 0;
+            for (const rec of data.results || []) {
+              if (!inBox(rec.decimalLongitude, rec.decimalLatitude, a.bbox)) continue;
+              addPoint(state.fishPoints, rec.decimalLongitude, rec.decimalLatitude, colorFor(sci), { obisRecord: rec, fish: sci }, 5);
+              shown++;
+            }
+            stats.set(a.id, { shown, total: Math.max(shown, data.total || 0) });
+          })
+          .catch((err) => live() && stats.set(a.id, { error: err.message }))
+          .finally(() => {
+            if (!live()) return;
+            state.viewer.scene.requestRender();
+            renderCardFish();
+            updateProfile();
+          });
+      }
+    }
+    renderCardFish();
+    renderLegend();
+    updateProfile();
+    state.viewer.scene.requestRender();
+  }
+
+  const countText = (s) => (!s ? 'Loading…' : s.error ? 'unavailable' : s.total > s.shown ? `${fmt(s.shown)} of ${fmt(s.total)}` : `${fmt(s.shown)} records`);
+
+  function renderCardFish() {
+    for (const a of state.areas) {
+      const rows = [...state.sel.fish.keys()].map((sci) => `<button class="px-legend-row px-rowbtn${state.focus === sci ? ' focus' : ''}" data-focus-fish="${esc(sci)}"><i style="background:${colorFor(sci)}"></i><span>${esc(fishInfo(sci).name)}</span><small>${countText((state.fishStats.get(sci) || new Map()).get(a.id))}</small></button>`);
+      fill(`r-${a.id}-fish`, rows.length ? `<h5>Fish records</h5>${rows.join('')}` : '');
+    }
+  }
+
+  function profileHtml(sci, record) {
+    const f = fishInfo(sci);
+    const color = colorFor(sci);
+    const stats = state.fishStats.get(sci) || new Map();
+    const where = state.areas.length
+      ? state.areas.map((a) => `<div class="px-legend-row"><b class="px-mini" style="background:${a.color}">${a.letter}</b><span>${esc(a.name)}</span><small>${countText(stats.get(a.id))}</small></div>`).join('')
+      : '<p class="px-muted">Add an area in step 1 to map where it has been recorded.</p>';
+    const facts = [['Size', f.size], ['Water zone', f.depth], ['Habitat', f.habitat]].filter(([, v]) => v);
+    return `
+      <div class="px-fish-head" style="--c:${color}"><small>${esc(f.group || 'Fish · OBIS')}</small><h3>${esc(f.name)}</h3><i>${esc(f.scientific)}</i></div>
+      ${record ? `<div class="px-zone" style="--c:${color}"><small>Selected record</small><span>${esc((record.eventDate || 'Date not provided').slice(0, 10))} · ${esc(record.datasetName || 'OBIS dataset')}</span>${record.depth !== undefined ? `<span>Depth ${esc(record.depth)} m</span>` : ''}</div>` : ''}
+      ${f.description ? `<p class="px-desc">${esc(f.description)}</p>` : ''}
+      ${facts.length ? `<dl class="px-facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : ''}
+      ${f.fact ? `<div class="px-insight"><span>${esc(f.fact)}</span></div>` : ''}
+      <h5>Recorded in your areas</h5>${where}
+      <a target="_blank" rel="noreferrer" href="https://www.fishbase.se/summary/${encodeURIComponent(f.scientific.replace(/ /g, '-'))}.html">Read more on FishBase ↗</a>
+      ${state.sel.fish.has(sci) ? `<button class="px-ghost px-wide" data-unselect-fish="${esc(sci)}">Remove from map</button>` : ''}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -499,17 +677,15 @@
     changed(false);
     clearMap();
     showResults();
-    const fish = fishSelection();
     const heat = HEATMAPS.filter((d) => state.sel.heat.has(d.id));
     const events = EVENT_TYPES.filter((t) => state.sel.events.has(t.id));
     const bounds = BOUNDARIES.filter((d) => state.sel.bounds.has(d.id));
-    renderLegend(fish, heat, events, bounds);
+    state.lastRun = { heat, events, bounds };
 
     $('#px-results').innerHTML = `<p class="px-period">${esc(state.start)} → ${esc(state.end)}</p>` + state.areas.map((a) => `
       <section class="px-card" style="--area:${a.color}">
         <header><b>${a.letter}</b><div><strong>${esc(a.name)}</strong><small>${a.bbox.map((v) => v.toFixed(1)).join(', ')}</small></div><button data-zoom-area="${a.id}" title="Zoom to area">⤢</button></header>
-        ${fish.length ? `<h5>Fish records</h5><div id="r-${a.id}-fish"></div>` : ''}
-        ${state.sel.allFish ? `<h5>Every fish species recorded here</h5><div id="r-${a.id}-all"></div>` : ''}
+        <div id="r-${a.id}-fish"></div>
         ${heat.some((d) => d.id === 'fishing') ? `<h5>Fishing effort</h5><div id="r-${a.id}-fishing"></div>` : ''}
         ${heat.some((d) => d.id === 'presence') ? `<h5>All vessel traffic</h5><div id="r-${a.id}-presence"></div>` : ''}
         ${heat.some((d) => d.id === 'sar') ? `<h5>Satellite radar detections</h5><div id="r-${a.id}-sar"></div>` : ''}
@@ -535,7 +711,8 @@
     state.viewer.scene.requestRender();
     flyToAreas();
 
-    for (const a of state.areas) analyzeArea(a, fish, heat, events, live);
+    refreshFish();
+    for (const a of state.areas) analyzeArea(a, heat, events, live);
   }
 
   function fill(id, html) {
@@ -574,47 +751,8 @@
     ? rows.slice(0, 6).map(([k, v]) => `<div class="px-bar"><span title="${esc(k)}">${esc(label(k))}</span><i style="width:${Math.max(2, (100 * v) / rows[0][1])}%;background:${color}"></i><small>${fmt(v)} ${unit}</small></div>`).join('')
     : '<p class="px-muted">None detected in this period.</p>';
 
-  function analyzeArea(a, fish, heat, events, live) {
+  function analyzeArea(a, heat, events, live) {
     const id = (k) => `r-${a.id}-${k}`;
-
-    if (fish.length) {
-      fill(id('fish'), fish.map((f, i) => `<div class="px-legend-row"><i style="background:${f.color}"></i><span>${esc(f.name)}</span><small id="${id(`fish${i}`)}">…</small></div>`).join(''));
-      fish.forEach(async (f, i) => {
-        try {
-          const params = new URLSearchParams({ species: f.scientific, bbox: a.bbox.join(',') });
-          const r = await fetch(`/api/observations?${params}`);
-          const data = await r.json();
-          if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-          if (!live()) return;
-          let shown = 0;
-          for (const rec of data.results || []) {
-            if (!inBox(rec.decimalLongitude, rec.decimalLatitude, a.bbox)) continue;
-            addPoint(state.fishPoints, rec.decimalLongitude, rec.decimalLatitude, f.color, { obisRecord: rec, fish: f }, 5);
-            shown++;
-          }
-          state.viewer.scene.requestRender();
-          fill(id(`fish${i}`), data.total > shown ? `${fmt(shown)} of ${fmt(data.total)}` : `${fmt(shown)} records`);
-        } catch (err) {
-          if (live()) fill(id(`fish${i}`), 'unavailable');
-        }
-      });
-    }
-
-    if (state.sel.allFish) {
-      const wkt = `POLYGON((${bboxPolygon(a.bbox).coordinates[0].map((p) => p.join(' ')).join(',')}))`;
-      section(id('all'), live, (async () => {
-        const lists = await Promise.all(FISH_TAXA.map(async (taxon) => {
-          const r = await fetch(`${OBIS}/checklist?${new URLSearchParams({ scientificname: taxon, geometry: wkt, size: 200 })}`);
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.json();
-        }));
-        const byName = new Map();
-        for (const t of lists.flatMap((l) => l.results || [])) if ((t.taxonRank || '').toLowerCase() === 'species') byName.set(t.scientificName, t);
-        return [...byName.values()].sort((x, y) => (y.records || 0) - (x.records || 0));
-      })(), (list) => list.length
-        ? `<p class="px-muted">${fmt(list.length)}+ species. Tap + to put one on the map.</p><div class="px-taxa">${list.slice(0, 40).map((t) => `<button class="px-taxon" data-add-species="${esc(t.scientificName)}"><i>${esc(t.scientificName)}</i><small>${fmt(t.records)}</small><b>+</b></button>`).join('')}</div>`
-        : '<p class="px-muted">No fish records in OBIS for this area.</p>');
-    }
 
     const [fishingDef, presenceDef, sarDef] = HEATMAPS;
     if (heat.includes(fishingDef)) {
@@ -667,16 +805,17 @@
     }
   }
 
-  function renderLegend(fish, heat, events, bounds) {
+  function renderLegend() {
+    const { heat, events, bounds } = state.shown ? state.lastRun : { heat: [], events: [], bounds: [] };
     const rows = [
       ...state.areas.map((a) => [a.color, `${a.letter} · ${a.name}`, 'square']),
       ...heat.map((d) => [d.color, d.label, 'bar']),
-      ...fish.map((f) => [f.color, f.name, 'dot']),
+      ...[...state.sel.fish.keys()].map((sci) => [colorFor(sci), fishInfo(sci).name, 'dot']),
       ...events.map((t) => [t.color, t.label, 'dot']),
       ...bounds.map((d) => [d.stroke, d.label, 'line']),
     ];
     const box = $('#px-legend');
-    box.hidden = !rows.length;
+    box.hidden = !(state.shown || state.sel.fish.size) || !rows.length;
     box.innerHTML = `<strong>On the map</strong>${rows.map(([c, l, kind]) => `<div><i class="px-k-${kind}" style="--c:${c}"></i>${esc(l)}</div>`).join('')}`;
   }
 
@@ -708,6 +847,8 @@
   // Detail view (right panel): map clicks, vessels
 
   function showDetail(html) {
+    state.view = null;
+    $('#px-back').textContent = state.shown ? '← Back to results' : '← Back';
     $('#px-detail-body').innerHTML = html;
     $('#px-detail').hidden = false;
     $('#px-results-wrap').hidden = true;
@@ -740,13 +881,6 @@
       ${port ? `<span>Port: ${esc(port.name || port.label || '')} ${esc(port.flag || '')}</span>` : ''}</div>
       ${v.id ? `<button class="px-primary small" data-vessel="${esc(v.id)}">Vessel profile & risk insights</button>` : ''}`;
   };
-
-  const recordHtml = (r, f) => `<div class="px-zone" style="--c:${f.color}"><small>Fish record · OBIS</small>
-      <strong>${esc(f.name)}</strong><span><i>${esc(r.scientificName || f.scientific)}</i></span>
-      <span>${esc((r.eventDate || 'Date not provided').slice(0, 10))} · ${esc(r.datasetName || 'OBIS dataset')}</span>
-      ${r.depth !== undefined ? `<span>Depth ${esc(r.depth)} m</span>` : ''}</div>
-      <a target="_blank" rel="noreferrer" href="https://obis.org/occurrence/${encodeURIComponent(r.id)}">View source record ↗</a>
-      <a target="_blank" rel="noreferrer" href="https://www.fishbase.se/summary/${encodeURIComponent((r.scientificName || f.scientific).replace(/ /g, '-'))}.html">Species on FishBase ↗</a>`;
 
   function vesselSummary(entry) {
     const self = (entry.selfReportedInfo || [])[0] || {};
@@ -879,7 +1013,7 @@
     const Cesium = window.Cesium;
     const picked = viewer.scene.pick(movement.position);
     if (picked && picked.id && picked.id.gfwEvent) return showDetail(eventHtml(picked.id.gfwEvent, picked.id.type));
-    if (picked && picked.id && picked.id.obisRecord) return showDetail(recordHtml(picked.id.obisRecord, picked.id.fish));
+    if (picked && picked.id && picked.id.obisRecord) return selectFish(picked.id.fish, null, picked.id.obisRecord);
     const cart = viewer.camera.pickEllipsoid(movement.position, viewer.scene.globe.ellipsoid);
     if (!cart) return;
     const c = Cesium.Cartographic.fromCartesian(cart);
@@ -917,8 +1051,11 @@
           <header><b>2</b><div><strong>What</strong><small id="px-what-sum">Choose what to show</small></div></header>
           <div class="px-dates"><label>From<input type="date" id="px-start" value="${state.start}"></label><label>To<input type="date" id="px-end" value="${state.end}"></label></div>
           <details open><summary>Fish <small>OBIS</small></summary>
-            ${check('id', 'px-allfish', 'Every fish species recorded in my areas', 'A list per area — add any of them to the map')}
-            <input id="px-species-filter" class="px-filter" placeholder="Filter the field guide (${species().length})">
+            <p class="px-muted">Click a fish to put it on the map and see its profile. Untick to remove it.</p>
+            <input id="px-species-filter" class="px-filter" placeholder="Filter fish">
+            <div class="px-sub">Recorded in your areas <span id="px-found-count"></span></div>
+            <div id="px-found" class="px-list"></div>
+            <div class="px-sub">Field guide (${species().length})</div>
             <div id="px-species-list" class="px-list"></div>
             <form id="px-any" class="px-search"><input placeholder="Any other species, genus or family" autocomplete="off"><button type="submit">Add</button></form>
             <div id="px-custom"></div>
@@ -942,11 +1079,10 @@
     const right = document.createElement('div');
     right.id = 'px-right';
     right.innerHTML = `
-      <div class="px-right-head"><span class="px-eyebrow">3 · Results</span>
-        <form id="px-vsearch" class="px-search"><input placeholder="Find a vessel (name, MMSI, IMO)" autocomplete="off"><button type="submit">Find</button></form></div>
+      <div class="px-right-head"><span class="px-eyebrow">3 · Results</span></div>
       <div id="px-empty" class="px-empty">
         <p><b>1</b><span>Add one or more <strong>areas</strong> — click the globe or pick a region.</span></p>
-        <p><b>2</b><span>Choose the <strong>data</strong>: fish, fishing activity, vessel events, boundaries.</span></p>
+        <p><b>2</b><span>Choose the <strong>data</strong>. Fish appear as soon as you click them; fishing activity, vessel events and boundaries appear when you press Show.</span></p>
         <p><b>3</b><span>Press <strong>Show on map</strong>. Results for each area appear here.</span></p>
         <p class="px-muted">Nothing is drawn on the globe until you do.</p>
         <p class="px-token" id="px-token" hidden>Global Fishing Watch is not connected — check the server window. Fish data still works.</p>
@@ -963,10 +1099,14 @@
     legend.hidden = true;
     const hint = document.createElement('div');
     hint.id = 'px-hint';
-    mapArea.append(legend, hint);
+    const vsearch = document.createElement('form');
+    vsearch.id = 'px-vsearch';
+    vsearch.className = 'px-search px-map-search';
+    vsearch.innerHTML = '<input placeholder="Find a vessel (name, MMSI, IMO)" autocomplete="off" aria-label="Find a vessel"><button type="submit">Find</button>';
+    mapArea.append(legend, hint, vsearch);
     document.body.classList.add('px-on');
 
-    renderSpeciesList();
+    renderFishLists();
     changed();
 
     // Where
@@ -978,16 +1118,16 @@
       if (q.length >= 2) searchPlace(q);
     };
     // What
-    $('#px-allfish').onchange = (e) => { state.sel.allFish = e.target.checked; changed(); };
-    $('#px-species-filter').oninput = renderSpeciesList;
+    $('#px-species-filter').oninput = renderFishLists;
     $('#px-any').onsubmit = (e) => {
       e.preventDefault();
       const name = $('#px-any input').value.trim();
       if (name.length < 3) return;
-      if (!state.sel.custom.some((c) => c.name.toLowerCase() === name.toLowerCase())) state.sel.custom.push({ name, on: true });
+      const existing = guideFor(name) || species().find((sp) => sp.name.toLowerCase() === name.toLowerCase());
       $('#px-any input').value = '';
-      renderCustom();
-      changed();
+      if (existing) return selectFish(existing.scientific, existing.name);
+      if (!state.custom.includes(name)) state.custom.push(name);
+      selectFish(name, name);
     };
     const onDates = () => {
       const start = $('#px-start').value, end = $('#px-end').value;
@@ -1000,29 +1140,46 @@
     left.addEventListener('change', (e) => {
       const t = e.target;
       const toggle = (set, key) => (t.checked ? set.add(key) : set.delete(key));
-      if (t.dataset.species) toggle(state.sel.species, t.dataset.species);
-      else if (t.dataset.custom) state.sel.custom[+t.dataset.custom].on = t.checked;
-      else if (t.dataset.heat) toggle(state.sel.heat, t.dataset.heat);
+      if (t.dataset.heat) toggle(state.sel.heat, t.dataset.heat);
       else if (t.dataset.event) toggle(state.sel.events, t.dataset.event);
       else if (t.dataset.bound) toggle(state.sel.bounds, t.dataset.bound);
       else return;
       changed();
+    });
+    // Fish rows: click anywhere selects + focuses; the checkbox alone toggles.
+    const onFishRow = (e) => {
+      const row = e.target.closest('.px-fish');
+      if (!row) return;
+      if (e.target.matches('input')) e.target.checked ? selectFish(row.dataset.fish, row.dataset.name) : unselectFish(row.dataset.fish);
+      else selectFish(row.dataset.fish, row.dataset.name);
+    };
+    left.addEventListener('click', onFishRow);
+    left.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('px-fish')) {
+        e.preventDefault();
+        onFishRow(e);
+      }
     });
     // Actions
     $('#px-show').onclick = run;
     $('#px-reset').onclick = () => {
       state.runSeq++;
       state.areas = [];
-      state.sel = { allFish: false, species: new Set(), custom: [], heat: new Set(), events: new Set(), bounds: new Set() };
+      state.sel = { fish: new Map(), heat: new Set(), events: new Set(), bounds: new Set() };
+      state.custom = [];
+      state.focus = null;
+      state.foundSeq++;
+      state.found = null;
       state.shown = false;
       state.dirty = false;
       state.clickToAdd = true;
       $$('#px-left input[type=checkbox]').forEach((c) => (c.checked = false));
       $('#px-click').checked = true;
-      renderCustom();
       clearMap();
       drawAreas();
-      renderLegend([], [], [], []);
+      refreshFish();
+      renderFishLists();
+      renderLegend();
       showResults();
       changed();
     };
@@ -1033,7 +1190,7 @@
       if (q.length >= 3) searchVessels(q);
     };
     document.addEventListener('click', (e) => {
-      const el = e.target.closest('[data-remove-area],[data-zoom-area],[data-preset],[data-vessel],[data-add-species]');
+      const el = e.target.closest('[data-remove-area],[data-zoom-area],[data-preset],[data-vessel],[data-focus-fish],[data-unselect-fish]');
       if (!el || !el.closest('#px-left, #px-right')) return;
       if (el.dataset.removeArea) removeArea(el.dataset.removeArea);
       else if (el.dataset.zoomArea) zoomTo(state.areas.find((a) => a.id === el.dataset.zoomArea).bbox);
@@ -1042,15 +1199,8 @@
         addArea(p.name, p.bbox, p.dates);
         zoomTo(p.bbox);
       } else if (el.dataset.vessel) openVessel(el.dataset.vessel);
-      else if (el.dataset.addSpecies) {
-        const name = el.dataset.addSpecies;
-        const guide = species().find((sp) => sp.scientific === name);
-        if (guide) state.sel.species.add(name);
-        else if (!state.sel.custom.some((c) => c.name === name)) state.sel.custom.push({ name, on: true });
-        renderSpeciesList();
-        renderCustom();
-        run();
-      }
+      else if (el.dataset.focusFish) focusFish(el.dataset.focusFish);
+      else if (el.dataset.unselectFish) unselectFish(el.dataset.unselectFish);
     });
   }
 
