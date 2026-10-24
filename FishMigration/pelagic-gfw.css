@@ -1,0 +1,89 @@
+/* Global Fishing Watch panel — matches Pelagic's monochrome card style. */
+#gfw-panel {
+  position: absolute;
+  top: 72px;
+  right: 20px;
+  z-index: 3;
+  color: #111;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-height: calc(100% - 230px);
+  min-height: 0;
+}
+.gfw-tab {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.gfw-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff7a1a; }
+.gfw-body {
+  display: none;
+  width: 300px;
+  margin-top: 8px;
+  background: #fff;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  padding: 16px 18px;
+  overflow: auto;
+  min-height: 0;
+  box-shadow: 0 3px 12px #0002;
+}
+#gfw-panel.open .gfw-body { display: block; }
+#gfw-panel.open .gfw-tab { display: none; }
+body.gfw-open .map-controls { right: 336px; }
+.gfw-head { display: flex; justify-content: space-between; align-items: center; }
+.gfw-head button { font-size: 20px; line-height: 1; padding: 0 2px; }
+.gfw-eyebrow { color: #666; letter-spacing: .6px; font-size: 9px; text-transform: uppercase; }
+#gfw-panel h4 { margin: 16px 0 6px; font-size: 10px; letter-spacing: .6px; text-transform: uppercase; color: #666; font-weight: 600; }
+#gfw-panel h5 { margin: 12px 0 4px; font-size: 11px; font-weight: 600; }
+#gfw-report > h4 { color: #111; font-size: 13px; text-transform: none; letter-spacing: 0; border-top: 1px solid #ddd; padding-top: 14px; }
+.gfw-toggle { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #eee; cursor: pointer; }
+.gfw-toggle strong { display: block; font-weight: 500; }
+.gfw-toggle small, .gfw-muted { color: #777; font-size: 10px; display: block; line-height: 1.4; }
+.gfw-toggle input, .gfw-check input { accent-color: #111; }
+.gfw-toggle input:disabled + * , .gfw-toggle:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.gfw-token { background: #fff4e5; border: 1px solid #f0c890; padding: 8px 10px; font-size: 11px; margin: 10px 0 0; }
+.gfw-preset { width: 100%; text-align: left; margin-top: 12px; padding: 9px 10px; border: 1px solid #111; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.gfw-preset:hover { background: #111; color: #fff; }
+.gfw-dates { display: flex; gap: 8px; margin-top: 10px; }
+.gfw-dates label { flex: 1; font-size: 10px; color: #666; }
+.gfw-dates input { width: 100%; border: 1px solid #ccc; border-radius: 3px; padding: 4px; font-size: 11px; color: #111; }
+.gfw-ramp { display: flex; height: 6px; margin-top: 8px; }
+.gfw-ramp i { flex: 1; }
+.gfw-ramp-labels { display: flex; justify-content: space-between; color: #777; font-size: 9px; }
+.gfw-search { display: flex; gap: 6px; margin-top: 10px; }
+.gfw-search input { flex: 1; min-width: 0; border: 1px solid #ccc; border-radius: 3px; padding: 6px 8px; font-size: 11px; }
+.gfw-search button { background: #111; color: #fff; border-radius: 3px; padding: 6px 10px; font-size: 11px; }
+.gfw-plot { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.gfw-plot > i { width: 9px; height: 9px; border-radius: 50%; flex: none; border: 1px solid #0004; }
+.gfw-plot span { flex: 1; min-width: 0; }
+.gfw-plot em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gfw-plot small { color: #777; font-size: 10px; }
+.gfw-plot button { font-size: 16px; color: #777; }
+.gfw-check { display: flex; gap: 6px; align-items: center; margin-top: 12px; font-size: 11px; }
+#gfw-info { margin-top: 10px; }
+.gfw-zone { border-left: 3px solid #111; padding: 4px 0 4px 10px; margin-bottom: 8px; }
+.gfw-zone small { color: #777; font-size: 9px; text-transform: uppercase; letter-spacing: .5px; display: block; }
+.gfw-zone strong { display: block; font-size: 13px; }
+.gfw-zone span { display: block; color: #555; font-size: 10px; }
+.gfw-zone a { font-size: 10px; }
+.gfw-bar { display: grid; grid-template-columns: 34px 1fr 60px; align-items: center; gap: 6px; font-size: 10px; margin: 3px 0; }
+.gfw-bar i { height: 6px; background: #ff7a1a; display: block; }
+.gfw-bar small { text-align: right; color: #555; }
+.gfw-taxon { display: flex; justify-content: space-between; width: 100%; gap: 8px; padding: 3px 0; border-bottom: 1px solid #f0f0f0; font-size: 11px; text-align: left; }
+.gfw-taxon:hover { background: #f5f5f3; }
+.gfw-taxon small { color: #777; }
+.gfw-credit { color: #888; font-size: 9px; margin-top: 14px; line-height: 1.5; }
+
+@media (max-width: 760px) {
+  #gfw-panel { top: auto; bottom: 150px; right: 12px; left: 12px; align-items: stretch; max-height: 60%; }
+  .gfw-body { width: auto; }
+  body.gfw-open .map-controls { right: 20px; }
+}
