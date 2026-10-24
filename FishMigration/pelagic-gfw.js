@@ -43,6 +43,20 @@
     { name: 'Indian Ocean', bbox: [35, -40, 100, 25] },
     { name: 'Eastern Pacific', bbox: [-150, -30, -75, 55] },
   ];
+  // Basemaps: Esri tiles are free to use with attribution. "Simple" is the bundled
+  // Natural Earth image, which also stays underneath as a fallback.
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
+  const BASEMAPS = [
+    { id: 'satellite', label: 'Satellite', url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, max: 19, credit: 'Imagery © Esri, Maxar, Earthstar Geographics' },
+    { id: 'ocean', label: 'Ocean', url: `${ESRI}/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}`, max: 13, credit: 'Ocean basemap © Esri, GEBCO, NOAA, Garmin' },
+    { id: 'simple', label: 'Simple' },
+  ];
+  const LABEL_LAYERS = {
+    satellite: `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`,
+    ocean: `${ESRI}/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}`,
+    simple: `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`,
+  };
+  const AREA_SIZES = [0.25, 0.5, 1, 2, 5];
   const AREA_COLORS = ['#ffffff', '#7fdbff', '#c3f584', '#ff6f91', '#f9f871', '#d29bfd', '#ffb347'];
   const FISH_COLORS = ['#75e1cd', '#f5a078', '#b7b7f5', '#e9cb79', '#79b8f2', '#ef9391', '#c3f584', '#d29bfd'];
   const FISH_TAXA = ['Actinopterygii', 'Elasmobranchii'];
@@ -55,7 +69,10 @@
     areas: [],
     nextArea: 0,
     clickToAdd: true,
-    size: 6,
+    size: 1,
+    basemap: 'satellite',
+    showLabels: true,
+    baseLayers: [],
     sel: { fish: new Map(), heat: new Set(), events: new Set(), bounds: new Set() },
     custom: [],
     found: null,
@@ -1027,6 +1044,43 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Basemap and rendering quality
+
+  function setBasemap(id, labels = state.showLabels) {
+    const { viewer } = state;
+    const Cesium = window.Cesium;
+    for (const layer of state.baseLayers) viewer.imageryLayers.remove(layer, true);
+    state.baseLayers = [];
+    state.basemap = id;
+    state.showLabels = labels;
+    const def = BASEMAPS.find((b) => b.id === id) || BASEMAPS[0];
+    let index = 1; // above the bundled Natural Earth layer, below all data layers
+    const add = (url, max, credit) => {
+      const provider = new Cesium.UrlTemplateImageryProvider({ url, maximumLevel: max, credit: new Cesium.Credit(credit) });
+      const layer = viewer.imageryLayers.addImageryProvider(provider, index++);
+      state.baseLayers.push(layer);
+    };
+    if (def.url) add(def.url, def.max, def.credit);
+    if (labels) add(LABEL_LAYERS[def.id], 16, 'Labels © Esri');
+    try { localStorage.setItem('pelagic-basemap', JSON.stringify({ id, labels })); } catch {}
+    $$('#px-basemap [data-basemap]').forEach((b) => b.classList.toggle('active', b.dataset.basemap === id));
+    viewer.scene.requestRender();
+  }
+
+  function sharpenGlobe(viewer) {
+    const Cesium = window.Cesium;
+    // Render at the screen's real pixel density (Retina) instead of CSS pixels.
+    viewer.useBrowserRecommendedResolution = false;
+    viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2);
+    viewer.scene.postProcessStages.fxaa.enabled = true;
+    viewer.scene.globe.maximumScreenSpaceError = 1.5;
+    viewer.scene.globe.tileCacheSize = 300;
+    viewer.scene.skyAtmosphere = new Cesium.SkyAtmosphere();
+    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 300;
+    viewer.scene.requestRender();
+  }
+
+  // ---------------------------------------------------------------------------
   // Panels
 
   const check = (attr, value, text, note, color, statusId) => `<label class="px-check"><input type="checkbox" ${attr}="${value}">${color ? `<i class="px-swatch" style="background:${color}"></i>` : ''}<span>${text}${note || statusId ? `<small ${statusId ? `data-status="${statusId}"` : ''}>${note || ''}</small>` : ''}</span></label>`;
@@ -1040,7 +1094,7 @@
           <header><b>1</b><div><strong>Where</strong><small id="px-where-sum">Add one or more areas</small></div></header>
           <label class="px-check"><input type="checkbox" id="px-click" checked><span>Click the globe to add an area</span></label>
           <label class="px-inline">Area size
-            <select id="px-size">${[2, 6, 12, 20].map((s) => `<option value="${s}" ${s === state.size ? 'selected' : ''}>${s}° × ${s}° (~${fmt(s * 111)} km)</option>`).join('')}</select></label>
+            <select id="px-size">${AREA_SIZES.map((s) => `<option value="${s}" ${s === state.size ? 'selected' : ''}>${s}° × ${s}° (~${fmt(s * 111)} km)</option>`).join('')}</select></label>
           <form id="px-place" class="px-search"><input placeholder="Search a place, or lat, lon" autocomplete="off"><button type="submit">Add</button></form>
           <div id="px-place-results"></div>
           <div class="px-sub">Or pick a region</div>
@@ -1103,7 +1157,16 @@
     vsearch.id = 'px-vsearch';
     vsearch.className = 'px-search px-map-search';
     vsearch.innerHTML = '<input placeholder="Find a vessel (name, MMSI, IMO)" autocomplete="off" aria-label="Find a vessel"><button type="submit">Find</button>';
-    mapArea.append(legend, hint, vsearch);
+    const basemap = document.createElement('div');
+    basemap.id = 'px-basemap';
+    basemap.innerHTML = BASEMAPS.map((b) => `<button data-basemap="${b.id}">${b.label}</button>`).join('') +
+      `<label><input type="checkbox" id="px-labels" ${state.showLabels ? 'checked' : ''}> Labels</label>`;
+    mapArea.append(legend, hint, vsearch, basemap);
+    basemap.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-basemap]');
+      if (b) setBasemap(b.dataset.basemap);
+    });
+    $('#px-labels').onchange = (e) => setBasemap(state.basemap, e.target.checked);
     document.body.classList.add('px-on');
 
     renderFishLists();
@@ -1213,6 +1276,7 @@
     setTimeout(() => {
       viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
       viewer.entities.removeAll();
+      sharpenGlobe(viewer); // after the atlas applies its own camera limits
       viewer.scene.requestRender();
     }, 0);
     const prims = viewer.scene.primitives;
@@ -1232,7 +1296,12 @@
         viewer.scene.requestRender();
       }, 0);
     });
+    try {
+      const saved = JSON.parse(localStorage.getItem('pelagic-basemap') || 'null');
+      if (saved) { state.basemap = saved.id; state.showLabels = saved.labels; }
+    } catch {}
     if (!$('#px-left')) buildPanels();
+    setBasemap(state.basemap, state.showLabels);
 
     try {
       state.gfwReady = !!(await (await fetch('/api/config')).json()).gfw;

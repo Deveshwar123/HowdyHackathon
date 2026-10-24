@@ -7,7 +7,7 @@ where fishing happens and where the ocean is protected.
 
 Nothing is drawn on the globe until you ask for it, and then only inside the areas you chose.
 
-1. **Where** (left panel) — add one or more areas: click the ocean (choose a 2°–20° box size),
+1. **Where** (left panel) — add one or more areas: click the ocean (choose a ¼°–5° box size; default 1° ≈ 111 km),
    pick a region (Eastern Tropical Pacific corridor / CMAR, Gulf of Mexico, Caribbean, Coral
    Triangle, …), or search a place or `lat, lon`. Each area gets a letter and colour.
 2. **What** (left panel) — tick the data and set the dates:
@@ -23,6 +23,9 @@ Nothing is drawn on the globe until you ask for it, and then only inside the are
 3. **Show on map** — the right panel shows one card per area with only what you ticked: record
    counts, fishing hours by flag and gear, top vessels, traffic by type, likely dark vessels, event
    counts. A legend on the map lists what is drawn.
+
+The map switcher (bottom-right) picks **Satellite** (Esri World Imagery, high resolution), **Ocean**
+(seafloor bathymetry) or **Simple**, with optional labels.
 
 Click any dot or boundary on the map for details. Click a vessel (or use **Find a vessel** in the top-right corner of the map) for
 its identity, owner, authorizations, risk insights (IUU listing, fishing in no-take MPAs, without
