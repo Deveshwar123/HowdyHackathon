@@ -1,34 +1,4 @@
-# Backbone — Tidecast + the Pelagic ocean atlas
-
-Everything for the HowdyHackathon project lives in this folder.
-
-## Run it
-
-```bash
-cd Backbone
-python3 server.py
-```
-It opens the **Tidecast** landing page (`/tidecast/`). *Explore the waters* opens the atlas (`/`).
-
-## Tidecast landing page (`tidecast/`)
-
-- A photoreal, slowly rotating Earth (NASA Blue Marble day map, city lights on the night side,
-  relief shading, ocean sun glint, thin procedural clouds, atmosphere glow) with glowing fishing
-  spots, dashed migration routes, ocean labels and a *College Station, TX* pin.
-- **Leaderboard** (nav link, the *This week's top catch* card, or scrolling down) plays the
-  sequence: the Earth morphs into a water drop → the view follows it down into the lake → splash,
-  ripples and a rebound jet → the leaderboard pops out of the rebound drop and lands on the leaf,
-  which bends under it → a drop gathers on the leaf tip; **tap it** (or wait) and it falls, the
-  leaf springs back and the full leaderboard rises. *Skip* jumps to the board; *Back to the globe*
-  returns. Visitors who prefer reduced motion get the board directly.
-- The lake is your photo, made live in WebGL: the leaf is cut out so it can bend, the water
-  ripples, and the drops are rendered as refracting lenses of the real scene.
-- **Leaderboard data:** edit `tidecast/leaderboard.js` (angler, species, measure, location, date,
-  points, period). Rows are ranked by points.
-- Assets: NASA imagery via the `three-globe` examples, three.js 0.169 and GSAP 3.13 are vendored
-  in `tidecast/vendor/`, so the page works offline except for Google Fonts.
-
-# Pelagic — A living ocean atlas
+# FishMigration — the Pelagic ocean atlas
 
 Interactive 3D globe of where fish have been recorded, layered with Global Fishing Watch data on
 where fishing happens and where the ocean is protected.
@@ -68,10 +38,11 @@ Click any dot or boundary on the map for details. Click a vessel (or use **Find 
 its identity, owner, authorizations, risk insights (IUU listing, fishing in no-take MPAs, without
 RFMO authorization, AIS turned off) and its last 12 months of events drawn on the globe.
 
-## Running the atlas
+## Run it
 
-`python3 server.py` (above) picks a free port (8790 or the next free one), prints the address and
-opens the landing page; the atlas is at the site root.
+From the `TideCast` folder: `python3 FishMigration/server.py` (or double-click `start.command`).
+It picks a free port (8790 or the next free one), opens the TideCast landing page (`/backbone/`)
+and serves this atlas at the site root (`/`).
 On macOS you can instead double-click `start.command`. Needs Python 3 only, and
 an internet connection for live data. The Global Fishing Watch API token is built into `server.py`
 (this repo is private); the startup output says whether GFW accepts it.

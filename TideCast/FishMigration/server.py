@@ -32,6 +32,8 @@ from collections import OrderedDict
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+# The TideCast landing page (TideCast/Backbone), served at /backbone/.
+BACKBONE = os.path.join(os.path.dirname(ROOT), "Backbone")
 PORT = int(os.environ.get("PORT", "8790"))
 OBIS = os.environ.get("OBIS_URL", "https://api.obis.org/v3")
 GFW = os.environ.get("GFW_URL", "https://gateway.api.globalfishingwatch.org/v3")
@@ -176,6 +178,16 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 
+    def translate_path(self, path):
+        url_path = urllib.parse.urlsplit(path).path
+        if url_path == "/backbone" or url_path.startswith("/backbone/"):
+            rel = urllib.parse.unquote(url_path[len("/backbone"):]).lstrip("/")
+            full = os.path.normpath(os.path.join(BACKBONE, rel))
+            if full == BACKBONE or full.startswith(BACKBONE + os.sep):
+                return full
+            return os.path.join(BACKBONE, "__not_found__")
+        return super().translate_path(path)
+
     def log_message(self, fmt, *args):
         if "/api/" in self.path or (args and str(args[1])[0] in "45"):
             sys.stderr.write("[pelagic] " + (fmt % args) + "\n")
@@ -318,8 +330,9 @@ if __name__ == "__main__":
         print(f"Port {port} is already used by another app - trying {port + 1}")
         port += 1
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = f"http://127.0.0.1:{port}/tidecast/"   # landing page; "Explore" opens the atlas at /
-    print(f"Pelagic running at {url}  (press Ctrl+C to stop)")
+    url = f"http://127.0.0.1:{port}/backbone/"   # TideCast landing page; "Explore" opens the atlas at /
+    print(f"TideCast running at {url}  (press Ctrl+C to stop)")
+    print(f"  Fish atlas (FishMigration): http://127.0.0.1:{port}/")
     print(f"  OBIS records per species query: {MAX_RECORDS:,}")
     print("  Global Fishing Watch: checking the API token with GFW…")
     threading.Thread(target=check_token, daemon=True).start()
