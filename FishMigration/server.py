@@ -13,8 +13,8 @@ Serves the static atlas and implements the API routes the front end calls:
 
 Standard library only. Run:  python3 server.py   (then open http://localhost:8765)
 
-The GFW token is read from the GFW_TOKEN environment variable, or from a
-`.env` file next to this script containing a line `GFW_TOKEN=...`.
+The GFW API token is built in (BUILT_IN_GFW_TOKEN); the GFW_TOKEN environment
+variable overrides it.
 """
 
 import json
@@ -61,15 +61,17 @@ def find_token(text):
     return match.group(0) if match else ""
 
 
+# Team Global Fishing Watch API token (application "Final", valid until 2036).
+# Built in so nobody needs a .env file; set the GFW_TOKEN environment variable to use another.
+BUILT_IN_GFW_TOKEN = (
+    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImtpZEtleSJ9."
+    "eyJkYXRhIjp7Im5hbWUiOiJGaW5hbCAiLCJ1c2VySWQiOjc0NzAxLCJhcHBsaWNhdGlvbk5hbWUiOiJGaW5hbCAiLCJpZCI6MTYzNzYsInR5cGUiOiJ1c2VyLWFwcGxpY2F0aW9uIn0sImlhdCI6MTc5Mjg3MDU1OSwiZXhwIjoyMTA4MjMwNTU5LCJhdWQiOiJnZnciLCJpc3MiOiJnZncifQ."
+    "b26cF2CkfpSU662B1x_08I__zNCwa4Y8gtErPBAe3X46pg7oGy-xZbl4AizRoECyrvdkYrgGjLKUy5xDYpg9UaSdnoJLDWM1Yzd8kFcpfF9sEITciv-qYXhPqdcaFNTUzwBjIuiYEiUU_k--ZTmolytO52eg126ZGUJCAoYA16G-5TtIpvSW-eNJqQKTa6ubrx5lI2LcA3Zm0J9hsekgdCnPpganvQlBtIeY0kb_pjbaTYu8Jv30UruMKRnWswBD25VNy83xgm_sXY5VBHXajoGbBUrY_JiwvA0GtV0_T4OY1Jk2h9Okqq_eoVD-8b2r96RphCQ03XFM9Mr4p1HifKhALG29KD2pYmq8haWlySDHq1smPA2P9PvZOcTybBYpSbJm7TwLyRmzCZ0SyBc7sR2tO9IXtBNaNguVejuYj4Hh0cIDQHYmZiE2nu_9PeTRS7rHPi9JRRvLbbD3QYHAO-v1rtoS-WVdQpHnU9O7exzTKy_3swCmyQyF263WOchF"
+)
+
+
 def load_token():
-    token = find_token(os.environ.get("GFW_TOKEN", ""))
-    if token:
-        return token
-    env_path = os.path.join(ROOT, ".env")
-    if os.path.exists(env_path):
-        with open(env_path, encoding="utf-8", errors="ignore") as f:
-            return find_token(f.read())
-    return ""
+    return find_token(os.environ.get("GFW_TOKEN", "")) or BUILT_IN_GFW_TOKEN
 
 
 def check_token():
@@ -84,7 +86,7 @@ def check_token():
         print("  Global Fishing Watch: token accepted by GFW - fishing layers are live")
     elif status in (401, 403):
         print(f"  Global Fishing Watch: GFW REJECTED the token ({status}): {data[:200].decode(errors='ignore')}")
-        print("    -> create a new token at https://globalfishingwatch.org/our-apis/tokens and save it to .env")
+        print("    -> create a new token at https://globalfishingwatch.org/our-apis/tokens and replace BUILT_IN_GFW_TOKEN in server.py")
     else:
         print(f"  Global Fishing Watch: token check returned {status}: {data[:200].decode(errors='ignore')}")
 
@@ -267,7 +269,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def proxy(self, target, qs, gfw=False, method="GET", body=None):
         if gfw and not GFW_TOKEN:
-            return self.send_json({"error": "GFW_TOKEN is not set on the server"}, 503)
+            return self.send_json({"error": "No GFW token on the server"}, 503)
         full = target + ("?" + qs if qs else "")
         key = f"{method}:{full}:{body!r}"
         hit = cache.get(key)
@@ -309,11 +311,8 @@ if __name__ == "__main__":
     url = f"http://127.0.0.1:{port}/"
     print(f"Pelagic running at {url}  (press Ctrl+C to stop)")
     print(f"  OBIS records per species query: {MAX_RECORDS:,}")
-    if not GFW_TOKEN:
-        print("  Global Fishing Watch: no token found in .env - GFW layers disabled")
-    else:
-        print(f"  Global Fishing Watch: token found ({len(GFW_TOKEN)} characters), checking it with GFW…")
-        threading.Thread(target=check_token, daemon=True).start()
+    print("  Global Fishing Watch: checking the API token with GFW…")
+    threading.Thread(target=check_token, daemon=True).start()
     if not os.environ.get("NO_BROWSER"):
         threading.Timer(0.8, webbrowser.open, [url]).start()
     server.serve_forever()

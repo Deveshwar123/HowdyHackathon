@@ -19,18 +19,19 @@ where fishing happens and where the ocean is protected.
 
 ```bash
 cd FishMigration
-echo "GFW_TOKEN=<your Global Fishing Watch API token>" > .env   # once; .env is git-ignored
 python3 server.py
 ```
 It picks a free port (8790 or the next free one), prints the address and opens it in your browser.
 On macOS you can instead double-click `start.command`. Needs Python 3 only, and
-an internet connection for live data. Without a token everything except the GFW layers still works.
+an internet connection for live data. The Global Fishing Watch API token is built into `server.py`
+(this repo is private); the startup output says whether GFW accepts it.
 
 Options (environment variables): `PORT` (default 8790), `PELAGIC_MAX_RECORDS` (records per species
 query, default 5000; the globe stays smooth to about 20,000).
 
-Do not commit the token — it is tied to your GFW account. Get one at
-https://globalfishingwatch.org/our-apis/tokens.
+To use a different token, set the `GFW_TOKEN` environment variable or replace `BUILT_IN_GFW_TOKEN`
+in `server.py`. Tokens come from https://globalfishingwatch.org/our-apis/tokens. If this repo is
+ever made public, delete the built-in token on that page first.
 
 ## What's here
 - `index.html`, `_next/` — the app (built React front end; no source in this repo)
