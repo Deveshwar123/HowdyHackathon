@@ -3,28 +3,28 @@
 Interactive 3D globe of where fish have been recorded, layered with Global Fishing Watch data on
 where fishing happens and where the ocean is protected.
 
-- **64 species & groups** in the field guide (tunas, billfish, sharks, rays, reef fish, cod, salmon,
-  deep-sea fish) plus whole-group entries — *all ray-finned fish*, *all sharks & rays*, *tunas &
-  mackerels*, *groupers* — that pull every matching record in OBIS.
-- **Live OBIS records**: up to 5,000 points per species per query (the old offline sample had 180).
-- **Plot any species**: type any species, genus or family into the Fishing Watch panel, or click an
-  area and pick from every fish species OBIS has recorded there.
-- **All fish density layer**: every ray-finned fish, shark and ray record in OBIS as a heatmap.
-- **Global Fishing Watch** — every public API, in the *Fishing Watch* panel on the map:
-  - **4Wings (Layers tab):** apparent fishing effort, all AIS vessel presence, and satellite radar
-    (SAR) detections that reveal vessels with AIS switched off.
-  - **Datasets (Layers tab):** marine protected areas, EEZs, high seas and RFMO boundaries; click
-    inside one to see its name.
-  - **Area tab:** click the ocean for a 6° × 6° report: fishing hours by flag and by gear type, the
-    top fishing vessels, all vessel traffic by type, SAR detections (incl. likely dark vessels),
-    plus **Events** on the globe: fishing, encounters (possible transshipment), loitering, port
-    visits and AIS gaps.
-  - **Vessels tab (Vessels + Insights APIs):** search by name, MMSI, IMO or call sign, or click any
-    vessel/event. Shows identity, owner and authorizations, risk insights (IUU listing, fishing in
-    no-take MPAs, fishing without RFMO authorization, AIS turned off) and plots the vessel's last
-    12 months of events on the globe, joined in time order.
-  - The *Eastern Tropical Pacific corridor* button opens the CMAR core-MPA view from the Marine
-    Manager link (25 Jul – 23 Oct 2026). The From/To dates drive every GFW query.
+## How it works: Where → What → Results
+
+Nothing is drawn on the globe until you ask for it, and then only inside the areas you chose.
+
+1. **Where** (left panel) — add one or more areas: click the ocean (choose a 2°–20° box size),
+   pick a region (Eastern Tropical Pacific corridor / CMAR, Gulf of Mexico, Caribbean, Coral
+   Triangle, …), or search a place or `lat, lon`. Each area gets a letter and colour.
+2. **What** (left panel) — tick the data and set the dates:
+   - **Fish (OBIS):** any of the 64 field-guide species and groups, any other species/genus/family,
+     or *every fish species recorded in my areas*.
+   - **Fishing activity (GFW 4Wings):** fishing effort, all vessel traffic, satellite radar (SAR)
+     detections that reveal vessels with AIS switched off.
+   - **Vessel events (GFW Events):** fishing, encounters (possible transshipment), loitering, port
+     visits, AIS gaps.
+   - **Boundaries (GFW):** marine protected areas, EEZs, high seas, tuna RFMOs.
+3. **Show on map** — the right panel shows one card per area with only what you ticked: record
+   counts, fishing hours by flag and gear, top vessels, traffic by type, likely dark vessels, event
+   counts, and the species list (tap **+** to map one). A legend on the map lists what is drawn.
+
+Click any dot or boundary on the map for details. Click a vessel (or use **Find a vessel**) for
+its identity, owner, authorizations, risk insights (IUU listing, fishing in no-take MPAs, without
+RFMO authorization, AIS turned off) and its last 12 months of events drawn on the globe.
 
 ## Run it
 

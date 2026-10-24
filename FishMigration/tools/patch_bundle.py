@@ -26,6 +26,11 @@ PATCHES = [
      "Live queries retrieve thousands of records per species from OBIS. Cached samples contain up to 500."),
     ("curated seven-species field guide", "curated field guide of fish species and whole groups"),
     ("filters the seven-species guide", "filters the field guide"),
+    # The explorer panel (pelagic-gfw.js) owns what is drawn: the atlas no longer fetches or
+    # plots its own observation points unless window.PELAGIC_APP_POINTS is set.
+    ("Promise.all(P.map(async e=>{try{", "Promise.all((window.PELAGIC_APP_POINTS?P:[]).map(async e=>{try{"),
+    ("let n=new URLSearchParams({species:L.scientific});", "if(!window.PELAGIC_APP_POINTS)throw Error(`off`);let n=new URLSearchParams({species:L.scientific});"),
+    ("e.entities.removeAll(),z&&$.forEach", "e.entities.removeAll(),window.PELAGIC_APP_POINTS&&z&&$.forEach"),
 ]
 
 src = open(BUNDLE, encoding="utf-8").read()
