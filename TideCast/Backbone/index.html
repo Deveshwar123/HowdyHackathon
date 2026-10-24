@@ -2,26 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Tidecast — Find your next great catch</title>
   <meta name="description" content="Explore the waters. Learn what's biting. Make every catch count.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="tidecast.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
   <script src="leaderboard.js"></script>
-  <script src="vendor/gsap.min.js"></script>
 </head>
 <body>
-  <!-- Sky behind the globe; slides away when the camera follows the drop into the lake -->
-  <div id="sky" aria-hidden="true"><div class="sky-stars"></div><div class="sky-glow"></div><div class="sky-haze"></div></div>
-
-  <!-- The lake (WebGL: photo, cut-out leaf, live ripples, refracting drops) -->
-  <canvas id="lake" aria-hidden="true"></canvas>
-
-  <!-- The globe (WebGL) -->
-  <canvas id="globe" aria-hidden="true"></canvas>
-  <div id="globe-overlay" aria-hidden="true"></div>
+  <!-- The whole journey is one WebGL canvas driven by the page's scroll position -->
+  <canvas id="stage" aria-hidden="true"></canvas>
+  <div id="overlay" aria-hidden="true"></div>
+  <div id="underlay" aria-hidden="true"></div>
 
   <header class="top">
     <a class="logo" href="./" aria-label="Tidecast home">
@@ -34,7 +29,7 @@
       <span>TIDECAST</span>
     </a>
     <nav aria-label="Main">
-      <a href="../" class="active" id="nav-explore">Explore</a>
+      <a href="../" class="active">Explore</a>
       <button id="nav-leaderboard" type="button">Leaderboard</button>
       <button id="nav-how" type="button">How it works</button>
     </nav>
@@ -44,21 +39,32 @@
     <h1>Find your next<br>great catch.</h1>
     <p class="lede">Explore the waters. Learn what’s biting.<br>Make every catch count.</p>
     <a class="cta" href="../">EXPLORE THE WATERS <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-    <button class="teaser" id="teaser" type="button" aria-label="Open the leaderboard">
+    <button class="teaser" id="teaser" type="button" aria-label="Go to the leaderboard">
       <span class="teaser-art" aria-hidden="true"></span>
       <span class="teaser-text"><small>THIS WEEK’S TOP CATCH</small><strong id="teaser-title">—</strong><span id="teaser-sub"></span></span>
-      <span class="teaser-go">Leaderboard →</span>
+      <span class="teaser-go">Leaderboard ↓</span>
     </button>
   </main>
+  <div id="scroll-hint" aria-hidden="true"><span>Scroll to follow the signal</span><i></i></div>
 
-  <!-- Leaderboard: rides the rebound drop onto the leaf, then rises when the leaf drop falls -->
-  <div id="mini-card" aria-hidden="true">
-    <div class="mini-head"><span>LEADERBOARD</span><i></i></div>
-    <ol id="mini-rows"></ol>
+  <!-- Story captions, faded in and out by scroll position -->
+  <div id="captions" aria-live="polite">
+    <p data-cap="signal"><small>01 · SIGNAL</small>A tagged fish pings from <b>Lake Somerville, Texas</b> — 40 km from College Station.</p>
+    <p data-cap="descent"><small>02 · DESCENT</small>Follow the signal down through the atmosphere, from orbit to the water.</p>
+    <p data-cap="surface"><small>03 · SURFACE</small>Every ping is a position. Positions become paths.</p>
+    <p data-cap="under"><small>04 · BENEATH</small>Tagged fish trace where they move, feed and rest.</p>
   </div>
-  <button id="drop-hit" type="button" aria-label="Drop the water drop to open the leaderboard"><span>Tap the drop</span></button>
 
-  <section id="board" role="dialog" aria-modal="false" aria-labelledby="board-title" hidden>
+  <nav id="chapters" aria-label="Chapters">
+    <button data-to="0" aria-label="Earth"><span>Earth</span></button>
+    <button data-to="0.16" aria-label="Signal"><span>Signal</span></button>
+    <button data-to="0.38" aria-label="Descent"><span>Descent</span></button>
+    <button data-to="0.6" aria-label="Surface"><span>Surface</span></button>
+    <button data-to="0.8" aria-label="Beneath"><span>Beneath</span></button>
+    <button data-to="1" aria-label="Leaderboard"><span>Leaderboard</span></button>
+  </nav>
+
+  <section id="board" aria-labelledby="board-title">
     <header>
       <div><small>TIDECAST · ANGLERS</small><h2 id="board-title">Leaderboard</h2></div>
       <div class="tabs" role="tablist">
@@ -69,7 +75,7 @@
     <div class="podium" id="podium"></div>
     <ol class="rows" id="rows"></ol>
     <footer>
-      <button id="back" type="button">← Back to the globe</button>
+      <button id="back" type="button">↑ Back to the globe</button>
       <a class="cta small" href="../">EXPLORE THE WATERS →</a>
     </footer>
   </section>
@@ -87,7 +93,8 @@
     </div>
   </section>
 
-  <button id="skip" type="button" hidden>Skip ›</button>
+  <!-- Scroll length of the journey -->
+  <div id="track" aria-hidden="true"></div>
 
   <script type="module" src="tidecast.js"></script>
 </body>
