@@ -49,26 +49,44 @@ OBS_FIELDS = ",".join([
 USER_AGENT = "Pelagic/1.0 (HowdyHackathon fish atlas)"
 
 
-def clean_token(raw):
-    """Keeps only characters a GFW token (a JWT) can contain. Copying a long token
-    out of a chat window or document often adds invisible zero-width spaces, line
-    breaks or smart quotes, which break the HTTP Authorization header."""
-    return re.sub(r"[^A-Za-z0-9._-]", "", raw.replace("GFW_TOKEN", ""))
+JWT = re.compile(r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+INVISIBLE = re.compile("[\u00ad\u200b-\u200f\u2060\ufeff\u201c\u201d\"' ]")
+
+
+def find_token(text):
+    """Finds a GFW token (a JWT) anywhere in the text, however the line is written
+    (with or without GFW_TOKEN=, quotes, or trailing junk). Copying a long token out
+    of a chat window can add invisible characters, so those are removed first."""
+    match = JWT.search(INVISIBLE.sub("", text or ""))
+    return match.group(0) if match else ""
 
 
 def load_token():
-    token = clean_token(os.environ.get("GFW_TOKEN", ""))
+    token = find_token(os.environ.get("GFW_TOKEN", ""))
     if token:
         return token
     env_path = os.path.join(ROOT, ".env")
     if os.path.exists(env_path):
         with open(env_path, encoding="utf-8", errors="ignore") as f:
-            text = f.read()
-        # Accept GFW_TOKEN=... even if the line was wrapped or prefixed with junk.
-        match = re.search(r"GFW_TOKEN\s*=\s*(.+)", text, re.S)
-        if match:
-            return clean_token(match.group(1).split("\n\n")[0])
+            return find_token(f.read())
     return ""
+
+
+def check_token():
+    """Asks GFW whether the token works and says so in the terminal."""
+    url = GFW + "/vessels/search?" + urllib.parse.urlencode(
+        {"query": "Galapagos", "datasets[0]": "public-global-vessel-identity:latest", "limit": 1})
+    try:
+        status, _, data = fetch(url, headers={"Authorization": "Bearer " + GFW_TOKEN}, timeout=30)
+    except Exception as e:
+        return print(f"  Global Fishing Watch: could not reach the API to check the token ({e})")
+    if status == 200:
+        print("  Global Fishing Watch: token accepted by GFW - fishing layers are live")
+    elif status in (401, 403):
+        print(f"  Global Fishing Watch: GFW REJECTED the token ({status}): {data[:200].decode(errors='ignore')}")
+        print("    -> create a new token at https://globalfishingwatch.org/our-apis/tokens and save it to .env")
+    else:
+        print(f"  Global Fishing Watch: token check returned {status}: {data[:200].decode(errors='ignore')}")
 
 
 GFW_TOKEN = load_token()
@@ -292,11 +310,10 @@ if __name__ == "__main__":
     print(f"Pelagic running at {url}  (press Ctrl+C to stop)")
     print(f"  OBIS records per species query: {MAX_RECORDS:,}")
     if not GFW_TOKEN:
-        print("  Global Fishing Watch: no token (set GFW_TOKEN or create .env) - GFW layers disabled")
-    elif GFW_TOKEN.count(".") != 2:
-        print(f"  Global Fishing Watch: token looks incomplete ({len(GFW_TOKEN)} characters) - re-copy it into .env")
+        print("  Global Fishing Watch: no token found in .env - GFW layers disabled")
     else:
-        print(f"  Global Fishing Watch: token loaded ({len(GFW_TOKEN)} characters)")
+        print(f"  Global Fishing Watch: token found ({len(GFW_TOKEN)} characters), checking it with GFW…")
+        threading.Thread(target=check_token, daemon=True).start()
     if not os.environ.get("NO_BROWSER"):
         threading.Timer(0.8, webbrowser.open, [url]).start()
     server.serve_forever()
