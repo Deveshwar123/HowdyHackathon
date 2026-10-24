@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tidecast — Find your next great catch</title>
+  <meta name="description" content="Explore the waters. Learn what's biting. Make every catch count.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="tidecast.css">
+  <script src="leaderboard.js"></script>
+  <script src="vendor/gsap.min.js"></script>
+</head>
+<body>
+  <!-- Sky behind the globe; slides away when the camera follows the drop into the lake -->
+  <div id="sky" aria-hidden="true"><div class="sky-stars"></div><div class="sky-glow"></div><div class="sky-haze"></div></div>
+
+  <!-- The lake (WebGL: photo, cut-out leaf, live ripples, refracting drops) -->
+  <canvas id="lake" aria-hidden="true"></canvas>
+
+  <!-- The globe (WebGL) -->
+  <canvas id="globe" aria-hidden="true"></canvas>
+  <div id="globe-overlay" aria-hidden="true"></div>
+
+  <header class="top">
+    <a class="logo" href="./" aria-label="Tidecast home">
+      <svg viewBox="0 0 64 40" width="58" height="36" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#f7b28a"/><stop offset="1" stop-color="#e57a52"/></linearGradient></defs>
+        <path d="M3 11c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M3 21c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M3 31c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>
+      <span>TIDECAST</span>
+    </a>
+    <nav aria-label="Main">
+      <a href="../" class="active" id="nav-explore">Explore</a>
+      <button id="nav-leaderboard" type="button">Leaderboard</button>
+      <button id="nav-how" type="button">How it works</button>
+    </nav>
+  </header>
+
+  <main id="hero">
+    <h1>Find your next<br>great catch.</h1>
+    <p class="lede">Explore the waters. Learn what’s biting.<br>Make every catch count.</p>
+    <a class="cta" href="../">EXPLORE THE WATERS <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <button class="teaser" id="teaser" type="button" aria-label="Open the leaderboard">
+      <span class="teaser-art" aria-hidden="true"></span>
+      <span class="teaser-text"><small>THIS WEEK’S TOP CATCH</small><strong id="teaser-title">—</strong><span id="teaser-sub"></span></span>
+      <span class="teaser-go">Leaderboard →</span>
+    </button>
+  </main>
+
+  <!-- Leaderboard: rides the rebound drop onto the leaf, then rises when the leaf drop falls -->
+  <div id="mini-card" aria-hidden="true">
+    <div class="mini-head"><span>LEADERBOARD</span><i></i></div>
+    <ol id="mini-rows"></ol>
+  </div>
+  <button id="drop-hit" type="button" aria-label="Drop the water drop to open the leaderboard"><span>Tap the drop</span></button>
+
+  <section id="board" role="dialog" aria-modal="false" aria-labelledby="board-title" hidden>
+    <header>
+      <div><small>TIDECAST · ANGLERS</small><h2 id="board-title">Leaderboard</h2></div>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-period="week" aria-selected="true">This week</button>
+        <button role="tab" data-period="all" aria-selected="false">All time</button>
+      </div>
+    </header>
+    <div class="podium" id="podium"></div>
+    <ol class="rows" id="rows"></ol>
+    <footer>
+      <button id="back" type="button">← Back to the globe</button>
+      <a class="cta small" href="../">EXPLORE THE WATERS →</a>
+    </footer>
+  </section>
+
+  <section id="how" role="dialog" aria-modal="true" aria-labelledby="how-title" hidden>
+    <div class="how-card">
+      <button class="how-close" id="how-close" aria-label="Close">×</button>
+      <small>HOW IT WORKS</small>
+      <h2 id="how-title">Three steps to your next great catch</h2>
+      <ol>
+        <li><b>Explore the waters.</b> Pick any stretch of ocean or lake and see every fish recorded there, live from OBIS.</li>
+        <li><b>Learn what’s biting.</b> Layer in fishing activity, protected areas and vessel data from Global Fishing Watch.</li>
+        <li><b>Make every catch count.</b> Log your catch and climb the Tidecast leaderboard.</li>
+      </ol>
+    </div>
+  </section>
+
+  <button id="skip" type="button" hidden>Skip ›</button>
+
+  <script type="module" src="tidecast.js"></script>
+</body>
+</html>

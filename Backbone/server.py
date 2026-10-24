@@ -318,7 +318,7 @@ if __name__ == "__main__":
         print(f"Port {port} is already used by another app - trying {port + 1}")
         port += 1
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = f"http://127.0.0.1:{port}/"
+    url = f"http://127.0.0.1:{port}/tidecast/"   # landing page; "Explore" opens the atlas at /
     print(f"Pelagic running at {url}  (press Ctrl+C to stop)")
     print(f"  OBIS records per species query: {MAX_RECORDS:,}")
     print("  Global Fishing Watch: checking the API token with GFW…")
