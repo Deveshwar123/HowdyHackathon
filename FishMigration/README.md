@@ -10,10 +10,21 @@ where fishing happens and where the ocean is protected.
 - **Plot any species**: type any species, genus or family into the Fishing Watch panel, or click an
   area and pick from every fish species OBIS has recorded there.
 - **All fish density layer**: every ray-finned fish, shark and ray record in OBIS as a heatmap.
-- **Global Fishing Watch** (the Marine Manager map): apparent fishing effort, marine protected
-  areas, EEZs, high seas and RFMO boundaries; click an area for fishing hours by vessel flag and
-  individual fishing events (click an orange dot for the vessel). The *Eastern Tropical Pacific
-  corridor* button opens the CMAR core-MPA view from the Marine Manager link (25 Jul – 23 Oct 2026).
+- **Global Fishing Watch** — every public API, in the *Fishing Watch* panel on the map:
+  - **4Wings (Layers tab):** apparent fishing effort, all AIS vessel presence, and satellite radar
+    (SAR) detections that reveal vessels with AIS switched off.
+  - **Datasets (Layers tab):** marine protected areas, EEZs, high seas and RFMO boundaries; click
+    inside one to see its name.
+  - **Area tab:** click the ocean for a 6° × 6° report: fishing hours by flag and by gear type, the
+    top fishing vessels, all vessel traffic by type, SAR detections (incl. likely dark vessels),
+    plus **Events** on the globe: fishing, encounters (possible transshipment), loitering, port
+    visits and AIS gaps.
+  - **Vessels tab (Vessels + Insights APIs):** search by name, MMSI, IMO or call sign, or click any
+    vessel/event. Shows identity, owner and authorizations, risk insights (IUU listing, fishing in
+    no-take MPAs, fishing without RFMO authorization, AIS turned off) and plots the vessel's last
+    12 months of events on the globe, joined in time order.
+  - The *Eastern Tropical Pacific corridor* button opens the CMAR core-MPA view from the Marine
+    Manager link (25 Jul – 23 Oct 2026). The From/To dates drive every GFW query.
 
 ## Run it
 

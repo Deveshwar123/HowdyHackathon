@@ -1,15 +1,33 @@
 // Pelagic × Global Fishing Watch overlay.
-// Adds GFW layers (apparent fishing effort, MPAs, EEZs, RFMOs), an area report
-// (fishing hours by flag, fishing events, every fish species OBIS has recorded there),
-// and an "any species" search on top of the Pelagic globe. All API calls go through
-// server.py, which holds the GFW token.
+// Brings the Global Fishing Watch APIs onto the Pelagic globe:
+//   4Wings     — fishing effort, AIS vessel presence and SAR (satellite radar) detection
+//                heatmaps, plus area reports by flag, gear type and vessel
+//   Events     — fishing, encounters, loitering, port visits and AIS gaps (going dark)
+//   Vessels    — search any vessel, its identity and registry details
+//   Insights   — IUU listing, fishing in no-take MPAs, AIS-off history for a vessel
+//   Datasets   — MPA, EEZ, high seas and RFMO boundaries (vector context layers)
+// plus OBIS: every fish species recorded in an area, an all-fish density layer and
+// plotting of any taxon. All API calls go through server.py, which holds the GFW token.
 (() => {
   'use strict';
 
   const GFW = '/api/gfw';
   const OBIS = '/api/obis';
-  const EFFORT_DATASET = 'public-global-fishing-effort:latest';
-  const EVENTS_DATASET = 'public-global-fishing-events:latest';
+  const IDENTITY_DATASET = 'public-global-vessel-identity:latest';
+  // 4Wings heatmap datasets.
+  const HEATMAPS = [
+    { id: 'fishing', dataset: 'public-global-fishing-effort:latest', label: 'Apparent fishing effort', note: 'AIS-based fishing hours', color: '#ff7a1a', unit: 'h' },
+    { id: 'presence', dataset: 'public-global-presence:latest', label: 'All vessel presence', note: 'Every AIS-broadcasting vessel', color: '#4fc3f7', unit: 'h' },
+    { id: 'sar', dataset: 'public-global-sar-presence:latest', label: 'Satellite radar detections', note: 'SAR — finds vessels with AIS off', color: '#e84a5f', unit: 'detections' },
+  ];
+  // Events API datasets.
+  const EVENT_TYPES = [
+    { id: 'fishing', dataset: 'public-global-fishing-events:latest', label: 'Fishing', color: '#ff7a1a', on: true },
+    { id: 'encounter', dataset: 'public-global-encounters-events:latest', label: 'Encounters (possible transshipment)', color: '#e84a5f', on: true },
+    { id: 'loitering', dataset: 'public-global-loitering-events:latest', label: 'Loitering', color: '#b07cff', on: true },
+    { id: 'port', dataset: 'public-global-port-visits-events:latest', label: 'Port visits', color: '#4fc3f7', on: false },
+    { id: 'gap', dataset: 'public-global-gaps-events:latest', label: 'AIS gaps (went dark)', color: '#ffd54f', on: true },
+  ];
   // Context layers from the GFW Marine Manager map, drawn from GFW vector tiles.
   const CONTEXT_LAYERS = [
     { id: 'mpa', dataset: 'public-mpa-all', label: 'Marine protected areas', note: 'WDPA via Global Fishing Watch', fill: 'rgba(77, 208, 160, 0.22)', stroke: 'rgba(77, 208, 160, 0.95)' },
@@ -28,15 +46,18 @@
     gfwReady: false,
     start: CMAR.start,
     end: CMAR.end,
-    effortLayer: null,
+    heatLayers: {},
     contextLayers: {},
     densityLayer: null,
     eventsPoints: null,
+    vesselPoints: null,
+    vesselLines: null,
     plotPoints: null,
     plots: [],
     area: null,
     analyze: true,
     reportSeq: 0,
+    vesselSeq: 0,
   };
 
   // ---------------------------------------------------------------------------
@@ -217,6 +238,7 @@
     return canvas;
   }
 
+
   // ---------------------------------------------------------------------------
   // GFW requests
 
@@ -225,41 +247,47 @@
     const text = await r.text();
     let body;
     try { body = JSON.parse(text); } catch { body = { error: text.slice(0, 200) }; }
-    if (!r.ok) throw new Error(body.error || body.message || (body.messages && body.messages.join('; ')) || `HTTP ${r.status}`);
+    if (!r.ok) {
+      const detail = body.error || body.message || (body.messages && body.messages.map((m) => m.detail || m.title || m).join('; '));
+      throw new Error(typeof detail === 'string' && detail ? detail : `HTTP ${r.status}`);
+    }
     return body;
   };
+  const postJSON = (path, body) => gfwJSON(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
   const dateRange = () => `${state.start},${state.end}`;
+  const bboxPolygon = ([w, s, e, n]) => ({ type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] });
+  const fmt = (n) => Math.round(n || 0).toLocaleString();
 
-  function bboxPolygon([w, s, e, n]) {
-    return { type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] };
-  }
+  // ---------------------------------------------------------------------------
+  // Layers
 
-  async function showEffort(on) {
+  async function showHeatmap(def, on) {
     const { viewer } = state;
     const Cesium = window.Cesium;
-    if (state.effortLayer) {
-      viewer.imageryLayers.remove(state.effortLayer, true);
-      state.effortLayer = null;
+    if (state.heatLayers[def.id]) {
+      viewer.imageryLayers.remove(state.heatLayers[def.id], true);
+      delete state.heatLayers[def.id];
     }
     if (!on) {
-      setStatus('effort', '');
+      setStatus(`heat-${def.id}`, def.note);
       return viewer.scene.requestRender();
     }
-    setStatus('effort', 'Loading fishing activity…');
+    setStatus(`heat-${def.id}`, 'Loading…');
     try {
-      const params = new URLSearchParams({ interval: 'DAY', 'datasets[0]': EFFORT_DATASET, 'date-range': dateRange(), color: '#ff7a1a' });
-      const style = await gfwJSON(`/4wings/generate-png?${params}`, { method: 'POST' });
+      const params = new URLSearchParams({ interval: 'DAY', 'datasets[0]': def.dataset, 'date-range': dateRange(), color: def.color });
+      const style = await postJSON(`/4wings/generate-png?${params}`, {});
       const url = style.url.replace(/^https:\/\/gateway\.api\.globalfishingwatch\.org\/v3/, GFW);
       const provider = new Cesium.UrlTemplateImageryProvider({ url, maximumLevel: 12, credit: 'Global Fishing Watch' });
-      state.effortLayer = viewer.imageryLayers.addImageryProvider(provider, 1);
-      state.effortLayer.alpha = 0.9;
-      setStatus('effort', `AIS apparent fishing effort · ${state.start} → ${state.end}`);
-      renderLegend(style.colorRamp);
+      const layer = viewer.imageryLayers.addImageryProvider(provider, 1);
+      layer.alpha = 0.9;
+      state.heatLayers[def.id] = layer;
+      setStatus(`heat-${def.id}`, `${def.note} · ${state.start} → ${state.end}`);
+      renderLegend(def, style.colorRamp);
       viewer.scene.requestRender();
     } catch (err) {
-      setStatus('effort', `Fishing effort unavailable: ${err.message}`);
-      $('#gfw-effort').checked = false;
+      setStatus(`heat-${def.id}`, `Unavailable: ${err.message}`);
+      $(`#gfw-heat-${def.id}`).checked = false;
     }
   }
 
@@ -274,7 +302,7 @@
       const provider = contextLayerProvider(window.Cesium, def);
       const layer = viewer.imageryLayers.addImageryProvider(provider);
       state.contextLayers[def.id] = { layer, provider, def };
-      setStatus(def.id, '');
+      setStatus(def.id, def.note);
     }
     viewer.scene.requestRender();
   }
@@ -288,7 +316,7 @@
       state.densityLayer = null;
     }
     if (!on) {
-      setStatus('density', '');
+      setStatus('density', 'Every ray-finned fish, shark & ray in OBIS');
       return viewer.scene.requestRender();
     }
     setStatus('density', 'Loading every fish record in OBIS…');
@@ -334,47 +362,109 @@
     }
   }
 
+  function renderLegend(def, ramp) {
+    const steps = ramp && ramp.stepsByZoom && (ramp.stepsByZoom[2] || ramp.stepsByZoom[Object.keys(ramp.stepsByZoom)[0]]);
+    $('#gfw-legend').innerHTML = steps && steps.length
+      ? `<div class="gfw-ramp">${steps.map((s) => `<i style="background:${s.color}"></i>`).join('')}</div><div class="gfw-ramp-labels"><span>${esc(def.label)}: less</span><span>more</span></div>`
+      : '';
+  }
+
   // ---------------------------------------------------------------------------
-  // Area report
+  // Area report (4Wings report + Events + OBIS checklist)
+
+  // Sums a 4Wings report by one property; rows hold `hours` or `detections`.
+  async function report(def, groupBy, geometry) {
+    const params = new URLSearchParams({
+      'spatial-resolution': 'LOW', 'temporal-resolution': 'ENTIRE', 'spatial-aggregation': 'true',
+      'datasets[0]': def.dataset, 'date-range': dateRange(), format: 'JSON',
+    });
+    if (groupBy) params.set('group-by', groupBy);
+    const res = await postJSON(`/4wings/report?${params}`, { geojson: geometry });
+    const rows = [];
+    for (const entry of res.entries || []) for (const list of Object.values(entry)) rows.push(...(list || []));
+    return rows;
+  }
+
+  const sumBy = (rows, key) => {
+    const out = {};
+    for (const r of rows) {
+      const k = typeof key === 'function' ? key(r) : r[key] || '—';
+      out[k] = (out[k] || 0) + (r.hours ?? r.detections ?? r.value ?? 0);
+    }
+    return Object.entries(out).sort((a, b) => b[1] - a[1]);
+  };
+
+  const label = (k) => (/^[A-Z]{3}$/.test(k) ? k : String(k).toLowerCase().replace(/_/g, ' '));
+  const bars = (rows, unit, color = '#ff7a1a') => rows.length
+    ? rows.slice(0, 8).map(([k, v]) => `<div class="gfw-bar"><span title="${esc(k)}">${esc(label(k))}</span><i style="width:${Math.max(2, (100 * v) / rows[0][1])}%;background:${color}"></i><small>${fmt(v)} ${unit}</small></div>`).join('')
+    : '<p class="gfw-muted">Nothing detected here in this period.</p>';
+
+  function section(id, html) {
+    const el = $(`#gfw-${id}`);
+    if (el) el.innerHTML = html;
+  }
 
   async function analyzeArea(area) {
     const seq = ++state.reportSeq;
+    const current = () => seq === state.reportSeq;
     state.area = area;
-    const box = $('#gfw-report');
-    box.hidden = false;
+    $('#gfw-report').hidden = false;
     $('#gfw-report-title').textContent = area.name;
-    $('#gfw-flags').innerHTML = '<p class="gfw-muted">Loading fishing hours…</p>';
-    $('#gfw-events-summary').textContent = 'Loading fishing events…';
-    $('#gfw-checklist').innerHTML = '<p class="gfw-muted">Loading species recorded here…</p>';
     const geometry = bboxPolygon(area.bbox);
+    const loading = '<p class="gfw-muted">Loading…</p>';
+    ['flags', 'gear', 'vessels', 'presence', 'sar', 'events-summary', 'checklist'].forEach((id) => section(id, loading));
+    const needToken = (fn) => (state.gfwReady ? fn() : Promise.reject(new Error('GFW is not connected')));
+    const show = (promise, id, render) => promise
+      .then((v) => current() && section(id, render(v)))
+      .catch((err) => current() && section(id, `<p class="gfw-muted">Unavailable: ${esc(err.message)}</p>`));
 
-    const flags = (async () => {
-      if (!state.gfwReady) throw new Error('Set GFW_TOKEN on the server to enable');
-      const params = new URLSearchParams({
-        'spatial-resolution': 'LOW', 'temporal-resolution': 'ENTIRE', 'spatial-aggregation': 'true',
-        'group-by': 'FLAG', 'datasets[0]': EFFORT_DATASET, 'date-range': dateRange(), format: 'JSON',
-      });
-      const report = await gfwJSON(`/4wings/report?${params}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geojson: geometry }),
-      });
-      const byFlag = {};
-      for (const entry of report.entries || []) {
-        for (const rows of Object.values(entry)) {
-          for (const row of rows || []) byFlag[row.flag || '—'] = (byFlag[row.flag || '—'] || 0) + (row.hours || 0);
-        }
+    const [fishing, presence, sar] = HEATMAPS;
+    show(needToken(() => report(fishing, 'FLAG', geometry)), 'flags', (rows) => {
+      const byFlag = sumBy(rows, 'flag');
+      const total = byFlag.reduce((s, r) => s + r[1], 0);
+      return `<p><strong>${fmt(total)}</strong> hours of apparent fishing</p>${bars(byFlag, 'h')}`;
+    });
+    show(needToken(() => report(fishing, 'GEARTYPE', geometry)), 'gear', (rows) => bars(sumBy(rows, (r) => r.geartype || r.gearType || '—'), 'h'));
+    show(needToken(() => report(fishing, 'VESSEL_ID', geometry)), 'vessels', (rows) => {
+      const byVessel = new Map();
+      for (const r of rows) {
+        const id = r.vesselId || r.vessel_id || r.id;
+        if (!id) continue;
+        const v = byVessel.get(id) || { id, name: r.shipName || r.shipname || r.vesselName, flag: r.flag, gear: r.geartype, hours: 0 };
+        v.hours += r.hours || 0;
+        byVessel.set(id, v);
       }
-      return Object.entries(byFlag).sort((a, b) => b[1] - a[1]);
-    })();
+      const top = [...byVessel.values()].sort((a, b) => b.hours - a.hours).slice(0, 10);
+      return top.length
+        ? top.map((v) => `<button class="gfw-vessel" data-vessel="${esc(v.id)}"><span><strong>${esc(v.name || 'Unknown vessel')}</strong><small>${esc([v.flag, v.gear && v.gear.toLowerCase().replace(/_/g, ' ')].filter(Boolean).join(' · '))}</small></span><small>${fmt(v.hours)} h</small></button>`).join('')
+        : '<p class="gfw-muted">No fishing vessels detected here in this period.</p>';
+    });
+    show(needToken(() => report(presence, 'VESSEL_TYPE', geometry)), 'presence', (rows) => bars(sumBy(rows, (r) => r.vessel_type || r.vesselType || '—'), 'h', presence.color));
+    show(needToken(() => report(sar, 'MATCHED', geometry)), 'sar', (rows) => {
+      const total = rows.reduce((s, r) => s + (r.detections ?? r.hours ?? 0), 0);
+      const dark = rows.filter((r) => r.matched === false || r.matched === 'false').reduce((s, r) => s + (r.detections ?? 0), 0);
+      return `<p><strong>${fmt(total)}</strong> vessels seen by satellite radar${dark ? `, <strong>${fmt(dark)}</strong> not broadcasting AIS (possible dark vessels)` : ''}</p>`;
+    });
 
-    const events = (async () => {
-      if (!state.gfwReady) throw new Error('Set GFW_TOKEN on the server to enable');
-      return gfwJSON('/events?offset=0&limit=200', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ datasets: [EVENTS_DATASET], startDate: state.start, endDate: state.end, geometry }),
-      });
-    })();
+    // Events API: one request per selected event type.
+    const types = EVENT_TYPES.filter((t) => $(`#gfw-ev-${t.id}`).checked);
+    state.eventsPoints.removeAll();
+    show(needToken(async () => {
+      const results = await Promise.all(types.map(async (t) => {
+        try {
+          const res = await postJSON('/events?offset=0&limit=200', { datasets: [t.dataset], startDate: state.start, endDate: state.end, geometry });
+          if (current()) plotEvents(res.entries || [], t);
+          return { t, total: res.total ?? (res.entries || []).length };
+        } catch (err) {
+          return { t, error: err.message };
+        }
+      }));
+      return results;
+    }), 'events-summary', (results) => results.length
+      ? results.map(({ t, total, error }) => `<div class="gfw-legend-row"><i style="background:${t.color}"></i><span>${esc(t.label)}</span><small>${error ? `unavailable: ${esc(error)}` : fmt(total)}</small></div>`).join('')
+      : '<p class="gfw-muted">Choose event types above.</p>');
 
-    const checklist = (async () => {
+    show((async () => {
       const wkt = `POLYGON((${geometry.coordinates[0].map((p) => p.join(' ')).join(',')}))`;
       const lists = await Promise.all(FISH_TAXA.map(async (taxon) => {
         const r = await fetch(`${OBIS}/checklist?${new URLSearchParams({ scientificname: taxon, geometry: wkt, size: 200 })}`);
@@ -385,58 +475,173 @@
       for (const t of lists.flatMap((l) => l.results || [])) {
         if ((t.taxonRank || '').toLowerCase() === 'species') byName.set(t.scientificName, t);
       }
-      const species = [...byName.values()];
-      return { total: lists.reduce((s, l) => s + (l.total || 0), 0), species: species.sort((a, b) => (b.records || 0) - (a.records || 0)) };
-    })();
-
-    flags.then((rows) => {
-      if (seq !== state.reportSeq) return;
-      const total = rows.reduce((s, r) => s + r[1], 0);
-      $('#gfw-flags').innerHTML = rows.length
-        ? `<p><strong>${Math.round(total).toLocaleString()}</strong> hours of apparent fishing</p>` +
-          rows.slice(0, 8).map(([flag, h]) => `<div class="gfw-bar"><span>${esc(flag)}</span><i style="width:${Math.max(2, (100 * h) / rows[0][1])}%"></i><small>${Math.round(h).toLocaleString()} h</small></div>`).join('')
-        : '<p class="gfw-muted">No AIS fishing activity detected here in this period.</p>';
-    }).catch((err) => {
-      if (seq === state.reportSeq) $('#gfw-flags').innerHTML = `<p class="gfw-muted">Fishing report unavailable: ${esc(err.message)}</p>`;
-    });
-
-    events.then((res) => {
-      if (seq !== state.reportSeq) return;
-      plotEvents(res.entries || []);
-      $('#gfw-events-summary').textContent = `${(res.total ?? (res.entries || []).length).toLocaleString()} fishing events (orange) · showing ${(res.entries || []).length}`;
-    }).catch((err) => {
-      if (seq === state.reportSeq) $('#gfw-events-summary').textContent = `Fishing events unavailable: ${err.message}`;
-    });
-
-    checklist.then(({ species, total }) => {
-      if (seq !== state.reportSeq) return;
-      $('#gfw-checklist').innerHTML = species.length
-        ? `<p>${total.toLocaleString()} fish taxa recorded here. Click one to plot it.</p>` +
-          species.slice(0, 60).map((t) => `<button class="gfw-taxon" data-name="${esc(t.scientificName)}"><i>${esc(t.scientificName)}</i><small>${(t.records || 0).toLocaleString()}</small></button>`).join('')
-        : '<p class="gfw-muted">No fish records in OBIS for this area.</p>';
-    }).catch((err) => {
-      if (seq === state.reportSeq) $('#gfw-checklist').innerHTML = `<p class="gfw-muted">Species list unavailable: ${esc(err.message)}</p>`;
-    });
+      return { total: lists.reduce((s, l) => s + (l.total || 0), 0), species: [...byName.values()].sort((a, b) => (b.records || 0) - (a.records || 0)) };
+    })(), 'checklist', ({ species, total }) => species.length
+      ? `<p>${total.toLocaleString()} fish taxa recorded here. Click one to plot it.</p>` +
+        species.slice(0, 60).map((t) => `<button class="gfw-taxon" data-name="${esc(t.scientificName)}"><i>${esc(t.scientificName)}</i><small>${(t.records || 0).toLocaleString()}</small></button>`).join('')
+      : '<p class="gfw-muted">No fish records in OBIS for this area.</p>');
   }
 
-  function plotEvents(entries) {
+  function plotEvents(entries, type, collection = state.eventsPoints) {
     const Cesium = window.Cesium;
-    state.eventsPoints.removeAll();
     for (const e of entries) {
       if (!e.position) continue;
-      state.eventsPoints.add({
+      collection.add({
         position: Cesium.Cartesian3.fromDegrees(e.position.lon, e.position.lat, 2500),
         pixelSize: 7,
-        color: Cesium.Color.fromCssColorString('#ff7a1a'),
+        color: Cesium.Color.fromCssColorString(type.color),
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 1,
-        id: { gfwEvent: e },
+        id: { gfwEvent: e, type },
       });
     }
     state.viewer.scene.requestRender();
   }
 
-  // Plot any OBIS species (or higher taxon) on top of the guide species.
+  // ---------------------------------------------------------------------------
+  // Vessels API + Insights API
+
+  async function searchVessels(query) {
+    section('vessel-results', '<p class="gfw-muted">Searching…</p>');
+    try {
+      const params = new URLSearchParams({ query, 'datasets[0]': IDENTITY_DATASET, limit: 10 });
+      const res = await gfwJSON(`/vessels/search?${params}`);
+      const entries = (res.entries || []).map(vesselSummary).filter((v) => v.id);
+      section('vessel-results', entries.length
+        ? entries.map((v) => `<button class="gfw-vessel" data-vessel="${esc(v.id)}"><span><strong>${esc(v.name)}</strong><small>${esc([v.flag, v.type, v.ssvid && `MMSI ${v.ssvid}`].filter(Boolean).join(' · '))}</small></span></button>`).join('')
+        : '<p class="gfw-muted">No vessels found.</p>');
+    } catch (err) {
+      section('vessel-results', `<p class="gfw-muted">Vessel search unavailable: ${esc(err.message)}</p>`);
+    }
+  }
+
+  // Flattens a GFW vessel identity record (self-reported AIS + registries).
+  function vesselSummary(entry) {
+    const self = (entry.selfReportedInfo || [])[0] || {};
+    const reg = (entry.registryInfo || [])[0] || {};
+    const combined = (entry.combinedSourcesInfo || [])[0] || {};
+    const first = (list) => (list || []).map((x) => x.name || x).filter(Boolean)[0];
+    return {
+      id: self.id || combined.vesselId || entry.id,
+      name: self.shipname || reg.shipname || entry.shipname || 'Unknown vessel',
+      flag: self.flag || reg.flag || entry.flag,
+      ssvid: self.ssvid || reg.ssvid,
+      imo: self.imo || reg.imo,
+      callsign: self.callsign || reg.callsign,
+      gear: first(combined.geartypes) || first(reg.geartypes),
+      type: first(combined.shiptypes) || first(reg.shiptypes),
+      owner: ((entry.registryOwners || [])[0] || {}).name,
+      authorizations: (entry.registryPublicAuthorizations || []).map((a) => (a.sourceCode || []).join('/')).filter(Boolean),
+      firstSeen: self.transmissionDateFrom,
+      lastSeen: self.transmissionDateTo,
+    };
+  }
+
+  async function openVessel(id) {
+    const seq = ++state.vesselSeq;
+    const current = () => seq === state.vesselSeq;
+    openPanel(true);
+    selectTab('vessels');
+    const box = $('#gfw-vessel');
+    box.hidden = false;
+    box.innerHTML = '<p class="gfw-muted">Loading vessel…</p>';
+    state.vesselPoints.removeAll();
+    state.vesselLines.removeAll();
+
+    // Identity (Vessels API).
+    let v = { id, name: 'Vessel' };
+    try {
+      const res = await gfwJSON(`/vessels/${encodeURIComponent(id)}?${new URLSearchParams({ dataset: IDENTITY_DATASET })}`);
+      v = vesselSummary(res);
+      v.id = v.id || id;
+    } catch (err) {
+      v.error = err.message;
+    }
+    if (!current()) return;
+    const fields = [['Flag', v.flag], ['MMSI', v.ssvid], ['IMO', v.imo], ['Call sign', v.callsign], ['Gear', v.gear && v.gear.toLowerCase().replace(/_/g, ' ')], ['Type', v.type && v.type.toLowerCase()], ['Owner', v.owner], ['Authorizations', v.authorizations && v.authorizations.join(', ')], ['AIS seen', v.firstSeen && `${v.firstSeen.slice(0, 10)} → ${(v.lastSeen || '').slice(0, 10)}`]];
+    box.innerHTML = `
+      <div class="gfw-zone"><small>Vessel · Global Fishing Watch</small><strong>${esc(v.name)}</strong>
+        ${v.error ? `<span>Identity unavailable: ${esc(v.error)}</span>` : ''}</div>
+      <dl class="gfw-facts">${fields.filter(([, val]) => val).map(([k, val]) => `<dt>${k}</dt><dd>${esc(val)}</dd>`).join('')}</dl>
+      <a target="_blank" rel="noreferrer" href="https://globalfishingwatch.org/map/vessel/${encodeURIComponent(v.id)}">Open full profile in GFW ↗</a>
+      <h5>Risk insights (last 12 months)</h5><div id="gfw-insights"><p class="gfw-muted">Loading…</p></div>
+      <h5>Activity on the globe</h5><div id="gfw-vessel-events"><p class="gfw-muted">Loading…</p></div>`;
+
+    // Insights API.
+    const end = state.end, start = shiftDate(end, -365);
+    postJSON('/insights/vessels', {
+      includes: ['FISHING', 'GAP', 'COVERAGE', 'VESSEL-IDENTITY-IUU-VESSEL-LIST'],
+      startDate: start, endDate: end,
+      vessels: [{ datasetId: IDENTITY_DATASET, vesselId: v.id }],
+    }).then((ins) => current() && section('insights', insightsHtml(ins)))
+      .catch((err) => current() && section('insights', `<p class="gfw-muted">Insights unavailable: ${esc(err.message)}</p>`));
+
+    // Events API for this vessel: plotted in time order and joined by a line.
+    const results = await Promise.all(EVENT_TYPES.map(async (t) => {
+      try {
+        const params = new URLSearchParams({ 'vessels[0]': v.id, 'datasets[0]': t.dataset, 'start-date': start, 'end-date': end, limit: 200, offset: 0 });
+        const res = await gfwJSON(`/events?${params}`);
+        return { t, entries: res.entries || [] };
+      } catch (err) {
+        return { t, entries: [], error: err.message };
+      }
+    }));
+    if (!current()) return;
+    const all = [];
+    for (const { t, entries } of results) {
+      plotEvents(entries, t, state.vesselPoints);
+      for (const e of entries) if (e.position) all.push({ ...e, type: t });
+    }
+    all.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    const Cesium = window.Cesium;
+    if (all.length > 1) {
+      state.vesselLines.add({
+        positions: Cesium.Cartesian3.fromDegreesArrayHeights(all.flatMap((e) => [e.position.lon, e.position.lat, 3000])),
+        width: 1.5,
+        material: Cesium.Material.fromType('Color', { color: Cesium.Color.WHITE.withAlpha(0.6) }),
+      });
+    }
+    if (all.length) {
+      const lons = all.map((e) => e.position.lon), lats = all.map((e) => e.position.lat);
+      state.viewer.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(Math.min(...lons) - 2, Math.min(...lats) - 2, Math.max(...lons) + 2, Math.max(...lats) + 2), duration: 1.5 });
+    }
+    state.viewer.scene.requestRender();
+    section('vessel-events', results.map(({ t, entries, error }) => `<div class="gfw-legend-row"><i style="background:${t.color}"></i><span>${esc(t.label)}</span><small>${error ? 'unavailable' : entries.length}</small></div>`).join('') +
+      (all.length ? `<p class="gfw-muted">Line joins events in time order (${all[0].start.slice(0, 10)} → ${all[all.length - 1].start.slice(0, 10)}). <button class="gfw-link" id="gfw-clear-vessel">Clear</button></p>` : '<p class="gfw-muted">No events in the last 12 months.</p>'));
+  }
+
+  function insightsHtml(ins) {
+    const rows = [];
+    const fishing = ins.apparentFishing || {};
+    const fc = fishing.periodSelectedCounters || {};
+    const gap = ins.gap || {};
+    const gc = gap.periodSelectedCounters || {};
+    const iuu = (ins.vesselIdentity || {}).iuuVesselList || {};
+    const cov = ins.coverage || {};
+    if (iuu.totalTimesListed !== undefined || iuu.valuesInThePeriod) {
+      const listed = (iuu.totalTimesListedInThePeriod || 0) > 0 || (iuu.valuesInThePeriod || []).length > 0;
+      rows.push([listed ? 'warn' : 'ok', 'IUU vessel list', listed ? 'Listed as illegal, unreported or unregulated' : 'Not on IUU lists']);
+    }
+    if (fc.events !== undefined) rows.push(['', 'Fishing events', fmt(fc.events)]);
+    if (fc.eventsInNoTakeMPAs !== undefined) rows.push([fc.eventsInNoTakeMPAs ? 'warn' : 'ok', 'Fishing in no-take MPAs', fmt(fc.eventsInNoTakeMPAs)]);
+    if (fc.eventsInRFMOWithoutKnownAuthorization !== undefined) rows.push([fc.eventsInRFMOWithoutKnownAuthorization ? 'warn' : 'ok', 'Fishing in RFMOs without known authorization', fmt(fc.eventsInRFMOWithoutKnownAuthorization)]);
+    if (gc.eventsGapOff !== undefined || gc.events !== undefined) rows.push([(gc.eventsGapOff ?? gc.events) ? 'warn' : 'ok', 'AIS turned off', fmt(gc.eventsGapOff ?? gc.events)]);
+    if (cov.percentage !== undefined) rows.push(['', 'AIS coverage', `${Math.round(cov.percentage)}%`]);
+    return rows.length
+      ? rows.map(([level, k, val]) => `<div class="gfw-insight ${level}"><span>${esc(k)}</span><strong>${esc(val)}</strong></div>`).join('')
+      : '<p class="gfw-muted">No insights returned for this vessel.</p>';
+  }
+
+  const shiftDate = (iso, days) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    const s = d.toISOString().slice(0, 10);
+    return s < '2020-01-01' ? '2020-01-01' : s;
+  };
+
+  // ---------------------------------------------------------------------------
+  // OBIS species plots
+
   async function plotSpecies(name, bbox) {
     const Cesium = window.Cesium;
     const color = PLOT_COLORS[state.plots.length % PLOT_COLORS.length];
@@ -478,17 +683,10 @@
   }
 
   function renderPlots() {
-    $('#gfw-plots').innerHTML = state.plots.map((p, i) => `
+    section('plots', state.plots.map((p, i) => `
       <div class="gfw-plot"><i style="background:${p.color}"></i>
         <span><em>${esc(p.name)}</em><small>${p.loading ? 'Loading…' : p.error ? esc(p.error) : `${p.count.toLocaleString()} of ${(p.total ?? p.count).toLocaleString()} records`}</small></span>
-        <button data-remove="${i}" aria-label="Remove ${esc(p.name)}">×</button></div>`).join('');
-  }
-
-  function renderLegend(ramp) {
-    const steps = ramp && ramp.stepsByZoom && (ramp.stepsByZoom[2] || ramp.stepsByZoom[Object.keys(ramp.stepsByZoom)[0]]);
-    $('#gfw-legend').innerHTML = steps && steps.length
-      ? `<div class="gfw-ramp">${steps.map((s) => `<i style="background:${s.color}"></i>`).join('')}</div><div class="gfw-ramp-labels"><span>Less fishing</span><span>More</span></div>`
-      : '';
+        <button data-remove="${i}" aria-label="Remove ${esc(p.name)}">×</button></div>`).join(''));
   }
 
   // ---------------------------------------------------------------------------
@@ -498,7 +696,7 @@
     const { viewer } = state;
     const Cesium = window.Cesium;
     const picked = viewer.scene.pick(movement.position);
-    if (picked && picked.id && picked.id.gfwEvent) return showInfo(eventHtml(picked.id.gfwEvent));
+    if (picked && picked.id && picked.id.gfwEvent) return showInfo(eventHtml(picked.id.gfwEvent, picked.id.type));
     if (picked && picked.id && picked.id.obisRecord) return showInfo(recordHtml(picked.id.obisRecord, picked.id.plot));
     const cart = viewer.camera.pickEllipsoid(movement.position, viewer.scene.globe.ellipsoid);
     if (!cart) return;
@@ -515,6 +713,7 @@
       const name = `${Math.abs(lat).toFixed(1)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(1)}°${lon >= 0 ? 'E' : 'W'}`;
       analyzeArea({ bbox, name });
       openPanel(true);
+      selectTab('area');
     }
   }
 
@@ -525,13 +724,18 @@
     return `<div class="gfw-zone"><small>${esc(def.label)}</small><strong>${esc(name)}</strong>${extra ? `<span>${esc(extra)}</span>` : ''}</div>`;
   };
 
-  const eventHtml = (e) => {
+  const eventHtml = (e, type) => {
     const v = e.vessel || {};
-    return `<div class="gfw-zone"><small>Fishing event · Global Fishing Watch</small>
+    const other = e.encounter && e.encounter.vessel;
+    const port = e.port_visit && (e.port_visit.intermediateAnchorage || e.port_visit.startAnchorage);
+    const hours = e.start && e.end ? ` · ${((Date.parse(e.end) - Date.parse(e.start)) / 36e5).toFixed(1)} h` : '';
+    return `<div class="gfw-zone" style="border-color:${type ? type.color : '#111'}"><small>${esc(type ? type.label : 'Event')} event · Global Fishing Watch</small>
       <strong>${esc(v.name || 'Unknown vessel')}</strong>
       <span>${esc([v.flag, v.type, v.ssvid ? `MMSI ${v.ssvid}` : ''].filter(Boolean).join(' · '))}</span>
-      <span>${esc((e.start || '').slice(0, 16).replace('T', ' '))} → ${esc((e.end || '').slice(0, 16).replace('T', ' '))}</span>
-      ${v.id ? `<a target="_blank" rel="noreferrer" href="https://globalfishingwatch.org/map/vessel/${encodeURIComponent(v.id)}">Open vessel in GFW ↗</a>` : ''}</div>`;
+      <span>${esc((e.start || '').slice(0, 16).replace('T', ' '))} → ${esc((e.end || '').slice(0, 16).replace('T', ' '))}${hours}</span>
+      ${other ? `<span>With ${esc(other.name || 'unknown vessel')} (${esc(other.flag || '?')})</span>` : ''}
+      ${port ? `<span>Port: ${esc(port.name || port.label || '')} ${esc(port.flag || '')}</span>` : ''}
+      ${v.id ? `<button class="gfw-link" data-vessel="${esc(v.id)}">Vessel profile & risk insights →</button>` : ''}</div>`;
   };
 
   const recordHtml = (r, plot) => `<div class="gfw-zone"><small>OBIS record · ${esc(plot)}</small>
@@ -558,67 +762,94 @@
   }
 
   function openPanel(open) {
-    const panel = $('#gfw-panel');
-    panel.classList.toggle('open', open);
+    $('#gfw-panel').classList.toggle('open', open);
     document.body.classList.toggle('gfw-open', open);
   }
 
-  function toggleRow(id, label, note) {
-    return `<label class="gfw-toggle"><span><strong>${label}</strong><small data-status="${id}">${note}</small></span><input type="checkbox" id="gfw-${id}"></label>`;
+  function selectTab(tab) {
+    document.querySelectorAll('.gfw-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.gfw-page').forEach((p) => (p.hidden = p.dataset.page !== tab));
   }
+
+  const toggleRow = (id, label, note, color) =>
+    `<label class="gfw-toggle"><span>${color ? `<i class="gfw-swatch" style="background:${color}"></i>` : ''}<strong>${label}</strong><small data-status="${id}">${note}</small></span><input type="checkbox" id="gfw-${id}"></label>`;
 
   function buildPanel(mapArea) {
     const panel = document.createElement('section');
     panel.id = 'gfw-panel';
-    panel.setAttribute('aria-label', 'Global Fishing Watch layers');
+    panel.setAttribute('aria-label', 'Global Fishing Watch');
     panel.innerHTML = `
       <button class="gfw-tab" id="gfw-tab"><span class="gfw-dot"></span> Fishing Watch</button>
       <div class="gfw-body">
         <div class="gfw-head"><span class="gfw-eyebrow">Global Fishing Watch × OBIS</span><button id="gfw-close" aria-label="Close panel">×</button></div>
-        <p class="gfw-token" id="gfw-token" hidden>No GFW token on the server — fishing layers are off. See README.</p>
+        <p class="gfw-token" id="gfw-token" hidden>Global Fishing Watch is not connected — check the server window.</p>
         <button class="gfw-preset" id="gfw-cmar">Eastern Tropical Pacific corridor (CMAR MPAs) →</button>
         <div class="gfw-dates">
           <label>From<input type="date" id="gfw-start" value="${state.start}"></label>
           <label>To<input type="date" id="gfw-end" value="${state.end}"></label>
         </div>
-        <h4>Fishing activity</h4>
-        ${toggleRow('effort', 'Apparent fishing effort', 'AIS-based fishing hours')}
-        <div id="gfw-legend"></div>
-        <h4>Ocean boundaries</h4>
-        ${CONTEXT_LAYERS.map((d) => toggleRow(d.id, d.label, d.note)).join('')}
-        <h4>Fish everywhere</h4>
-        ${toggleRow('density', 'All fish records (density)', 'Every ray-finned fish, shark & ray in OBIS')}
-        <form id="gfw-search" class="gfw-search">
-          <input id="gfw-species" placeholder="Plot any species, genus or family" autocomplete="off">
-          <button type="submit">Plot</button>
-        </form>
-        <div id="gfw-plots"></div>
-        <label class="gfw-check"><input type="checkbox" id="gfw-analyze" checked> Report on the area I click</label>
-        <div id="gfw-info" hidden></div>
-        <div id="gfw-report" hidden>
-          <h4 id="gfw-report-title"></h4>
-          <h5>Fishing hours by vessel flag</h5>
-          <div id="gfw-flags"></div>
-          <h5>Fishing events</h5>
-          <p class="gfw-muted" id="gfw-events-summary"></p>
-          <h5>Fish recorded here (OBIS)</h5>
-          <div id="gfw-checklist"></div>
+        <nav class="gfw-tabs">
+          <button data-tab="layers" class="active">Layers</button><button data-tab="area">Area</button><button data-tab="vessels">Vessels</button><button data-tab="fish">Fish</button>
+        </nav>
+        <div class="gfw-page" data-page="layers">
+          <h4>Vessel activity (4Wings)</h4>
+          ${HEATMAPS.map((d) => toggleRow(`heat-${d.id}`, d.label, d.note, d.color)).join('')}
+          <div id="gfw-legend"></div>
+          <h4>Ocean boundaries</h4>
+          ${CONTEXT_LAYERS.map((d) => toggleRow(d.id, d.label, d.note, d.stroke)).join('')}
+          <h4>Fish everywhere (OBIS)</h4>
+          ${toggleRow('density', 'All fish records (density)', 'Every ray-finned fish, shark & ray in OBIS')}
         </div>
-        <p class="gfw-credit">Fishing data © <a href="https://globalfishingwatch.org" target="_blank" rel="noreferrer">Global Fishing Watch</a> (CC BY-NC 4.0). Fish records © <a href="https://obis.org" target="_blank" rel="noreferrer">OBIS</a>.</p>
+        <div class="gfw-page" data-page="area" hidden>
+          <label class="gfw-check"><input type="checkbox" id="gfw-analyze" checked> Report on the area I click on the globe</label>
+          <h4>Events to show</h4>
+          ${EVENT_TYPES.map((t) => `<label class="gfw-check"><input type="checkbox" id="gfw-ev-${t.id}" ${t.on ? 'checked' : ''}><i class="gfw-swatch" style="background:${t.color}"></i>${esc(t.label)}</label>`).join('')}
+          <div id="gfw-info" hidden></div>
+          <div id="gfw-report" hidden>
+            <h4 id="gfw-report-title"></h4>
+            <h5>Fishing hours by vessel flag</h5><div id="gfw-flags"></div>
+            <h5>Fishing hours by gear type</h5><div id="gfw-gear"></div>
+            <h5>Top fishing vessels</h5><div id="gfw-vessels"></div>
+            <h5>All vessel traffic by type</h5><div id="gfw-presence"></div>
+            <h5>Satellite radar (SAR) detections</h5><div id="gfw-sar"></div>
+            <h5>Events</h5><div id="gfw-events-summary"></div>
+            <h5>Fish recorded here (OBIS)</h5><div id="gfw-checklist"></div>
+          </div>
+          <p class="gfw-muted" id="gfw-area-hint">Click anywhere on the ocean to analyse a 6° × 6° area.</p>
+        </div>
+        <div class="gfw-page" data-page="vessels" hidden>
+          <form id="gfw-vessel-search" class="gfw-search">
+            <input id="gfw-vessel-query" placeholder="Vessel name, MMSI, IMO or call sign" autocomplete="off">
+            <button type="submit">Search</button>
+          </form>
+          <div id="gfw-vessel-results"></div>
+          <div id="gfw-vessel" hidden></div>
+        </div>
+        <div class="gfw-page" data-page="fish" hidden>
+          <form id="gfw-search" class="gfw-search">
+            <input id="gfw-species" placeholder="Plot any species, genus or family" autocomplete="off">
+            <button type="submit">Plot</button>
+          </form>
+          <div id="gfw-plots"></div>
+          <p class="gfw-muted">Or click an area on the globe and pick from every fish species recorded there.</p>
+        </div>
+        <p class="gfw-credit">Fishing and vessel data © <a href="https://globalfishingwatch.org" target="_blank" rel="noreferrer">Global Fishing Watch</a> (CC BY-NC 4.0). Fish records © <a href="https://obis.org" target="_blank" rel="noreferrer">OBIS</a>.</p>
       </div>`;
     mapArea.appendChild(panel);
 
     $('#gfw-tab').onclick = () => openPanel(!panel.classList.contains('open'));
     $('#gfw-close').onclick = () => openPanel(false);
-    $('#gfw-effort').onchange = (e) => showEffort(e.target.checked);
+    panel.querySelectorAll('.gfw-tabs button').forEach((b) => (b.onclick = () => selectTab(b.dataset.tab)));
+    for (const def of HEATMAPS) $(`#gfw-heat-${def.id}`).onchange = (e) => showHeatmap(def, e.target.checked);
+    for (const def of CONTEXT_LAYERS) $(`#gfw-${def.id}`).onchange = (e) => showContext(def, e.target.checked);
     $('#gfw-density').onchange = (e) => showDensity(e.target.checked);
     $('#gfw-analyze').onchange = (e) => (state.analyze = e.target.checked);
-    for (const def of CONTEXT_LAYERS) $(`#gfw-${def.id}`).onchange = (e) => showContext(def, e.target.checked);
+    for (const t of EVENT_TYPES) $(`#gfw-ev-${t.id}`).onchange = () => state.area && analyzeArea(state.area);
     const onDates = () => {
       const start = $('#gfw-start').value, end = $('#gfw-end').value;
       if (!start || !end || start >= end) return;
       state.start = start; state.end = end;
-      if ($('#gfw-effort').checked) showEffort(true);
+      for (const def of HEATMAPS) if ($(`#gfw-heat-${def.id}`).checked) showHeatmap(def, true);
       if (state.area) analyzeArea(state.area);
     };
     $('#gfw-start').onchange = onDates;
@@ -626,12 +857,13 @@
     $('#gfw-cmar').onclick = () => {
       $('#gfw-start').value = CMAR.start; $('#gfw-end').value = CMAR.end;
       state.start = CMAR.start; state.end = CMAR.end;
-      for (const id of ['mpa', 'effort']) {
+      for (const id of ['mpa', 'heat-fishing']) {
         const box = $(`#gfw-${id}`);
-        if (box.disabled) continue;
+        if (box.disabled || box.checked) continue;
         box.checked = true;
         box.dispatchEvent(new Event('change'));
       }
+      selectTab('layers');
       state.viewer.camera.flyTo({ destination: window.Cesium.Cartesian3.fromDegrees(CMAR.lon, CMAR.lat, CMAR.height), duration: 1.6 });
     };
     $('#gfw-search').onsubmit = (e) => {
@@ -641,11 +873,26 @@
       $('#gfw-species').value = '';
       plotSpecies(name);
     };
+    $('#gfw-vessel-search').onsubmit = (e) => {
+      e.preventDefault();
+      const q = $('#gfw-vessel-query').value.trim();
+      if (q.length >= 3) searchVessels(q);
+    };
     panel.addEventListener('click', (e) => {
       const taxon = e.target.closest('.gfw-taxon');
-      if (taxon) plotSpecies(taxon.dataset.name, state.area && state.area.bbox);
+      if (taxon) {
+        plotSpecies(taxon.dataset.name, state.area && state.area.bbox);
+        selectTab('fish');
+      }
       const remove = e.target.closest('[data-remove]');
       if (remove) removePlot(+remove.dataset.remove);
+      const vessel = e.target.closest('[data-vessel]');
+      if (vessel) openVessel(vessel.dataset.vessel);
+      if (e.target.id === 'gfw-clear-vessel') {
+        state.vesselPoints.removeAll();
+        state.vesselLines.removeAll();
+        state.viewer.scene.requestRender();
+      }
     });
   }
 
@@ -657,6 +904,8 @@
     if (!$('#gfw-panel')) buildPanel(mapArea);
     // Separate primitive collections: the atlas clears viewer.entities on every update.
     state.eventsPoints = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
+    state.vesselLines = viewer.scene.primitives.add(new Cesium.PolylineCollection());
+    state.vesselPoints = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     state.plotPoints = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas).setInputAction(onClick, Cesium.ScreenSpaceEventType.LEFT_CLICK);
     viewer.scene.camera.moveEnd.addEventListener(() => viewer.scene.requestRender());
@@ -669,7 +918,7 @@
     }
     if (!state.gfwReady) {
       $('#gfw-token').hidden = false;
-      for (const id of ['effort', ...CONTEXT_LAYERS.map((d) => d.id)]) $(`#gfw-${id}`).disabled = true;
+      for (const id of [...HEATMAPS.map((d) => `heat-${d.id}`), ...CONTEXT_LAYERS.map((d) => d.id)]) $(`#gfw-${id}`).disabled = true;
     }
   }
 
