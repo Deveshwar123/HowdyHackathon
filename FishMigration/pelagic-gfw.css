@@ -171,6 +171,31 @@ body.px-on .details { overflow: hidden; }
 #px-basemap label { display: flex; align-items: center; gap: 5px; padding: 0 10px; cursor: pointer; }
 #px-basemap input { accent-color: #111; }
 
+/* Area box: every fish recorded in the selected area */
+#px-areabox { position: absolute; top: 60px; left: 16px; z-index: 3; width: 290px; max-height: calc(100% - 230px); display: flex; flex-direction: column; background: #fff; color: #151515; border: 1px solid #bbb; border-top: 4px solid var(--area); border-radius: 3px; padding: 12px 14px; font-size: 12px; box-shadow: 0 3px 12px #0003; }
+#px-areabox[hidden] { display: none; }
+#px-areabox > header { display: flex; align-items: center; gap: 8px; }
+#px-areabox > header b { width: 22px; height: 22px; display: grid; place-items: center; background: var(--area); border: 1px solid #0004; border-radius: 3px; font-size: 11px; flex: none; }
+#px-areabox > header div { flex: 1; min-width: 0; }
+#px-areabox > header strong { display: block; font-size: 13px; }
+#px-areabox > header small { display: block; color: #777; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#px-areabox > header button { color: #777; font-size: 16px; padding: 0 2px; }
+#px-areabox > header button:hover { color: #111; }
+.px-areabox-sum { margin: 10px 0 4px; }
+.px-areabox-sum strong { font-size: 15px; }
+.px-areabox-list { overflow: auto; min-height: 0; flex: 1; margin-top: 4px; }
+.px-areafish { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 4px; border-bottom: 1px solid #f0f0f0; text-align: left; font-size: 11px; border-left: 3px solid transparent; }
+.px-areafish:hover { background: #f5f5f3; }
+.px-areafish.on span { font-weight: 600; }
+.px-areafish.focus { background: #efefeb; border-left-color: #111; }
+.px-areafish span { flex: 1; min-width: 0; }
+.px-areafish span small { display: block; color: #777; font-weight: 400; }
+.px-areafish > small { color: #777; }
+.px-empty-dot { background: transparent; border: 1px solid #bbb; }
+.px-area { cursor: pointer; }
+.px-area:hover { border-color: #999; }
+.px-area.active { border-color: #111; box-shadow: inset 3px 0 0 #111; }
+
 @media (max-width: 880px) {
   body.px-on .details { display: block; }
   #px-right { height: auto; }

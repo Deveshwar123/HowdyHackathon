@@ -10,6 +10,9 @@ Nothing is drawn on the globe until you ask for it, and then only inside the are
 1. **Where** (left panel) — add one or more areas: click the ocean (choose a ¼°–5° box size; default 1° ≈ 111 km),
    pick a region (Eastern Tropical Pacific corridor / CMAR, Gulf of Mexico, Caribbean, Coral
    Triangle, …), or search a place or `lat, lon`. Each area gets a letter and colour.
+   The selected area (the newest one, or any area you click on the map or in the list) opens a
+   **Fish in this area** box on the map listing every fish species recorded inside it — click one
+   to map it, or *Show every fish record here*.
 2. **What** (left panel) — tick the data and set the dates:
    - **Fish (OBIS):** every fish species recorded in your areas (listed automatically), the 64
      field-guide species and groups, or any other species/genus/family. **One click on a fish**

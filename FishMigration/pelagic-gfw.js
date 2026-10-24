@@ -83,6 +83,8 @@
     foundSeq: 0,
     view: null,
     lastRun: { heat: [], events: [], bounds: [] },
+    activeArea: null,
+    areaFish: new Map(),
     shown: false,
     dirty: false,
     runSeq: 0,
@@ -368,7 +370,7 @@
       for (let i = 0; i <= steps; i++) ring.push([w, n - ((n - s) * i) / steps]);
       state.outlines.add({
         positions: Cesium.Cartesian3.fromDegreesArrayHeights(ring.flatMap(([lon, lat]) => [((lon + 540) % 360) - 180, lat, 4000])),
-        width: 2,
+        width: a.id === state.activeArea ? 4 : 2,
         material: Cesium.Material.fromType('Color', { color: Cesium.Color.fromCssColorString(a.color) }),
       });
       state.labels.add({
@@ -415,6 +417,7 @@
   function addArea(name, bbox, dates) {
     const i = state.nextArea++;
     state.areas.push({ id: `a${i}`, letter: String.fromCharCode(65 + (i % 26)), name, bbox, color: AREA_COLORS[i % AREA_COLORS.length] });
+    state.activeArea = `a${i}`;
     if (dates) {
       [state.start, state.end] = dates;
       $('#px-start').value = state.start;
@@ -433,6 +436,8 @@
 
   function removeArea(id) {
     state.areas = state.areas.filter((a) => a.id !== id);
+    state.areaFish.delete(id);
+    if (state.activeArea === id) state.activeArea = null;
     drawAreas();
     changed();
     areasChanged();
@@ -440,7 +445,7 @@
 
   function renderAreas() {
     $('#px-areas').innerHTML = state.areas.length
-      ? state.areas.map((a) => `<div class="px-area"><b style="background:${a.color}">${a.letter}</b><span>${esc(a.name)}</span><button data-zoom-area="${a.id}" title="Zoom to area">⤢</button><button data-remove-area="${a.id}" aria-label="Remove area">×</button></div>`).join('')
+      ? state.areas.map((a) => `<div class="px-area${a.id === state.activeArea ? ' active' : ''}" data-select-area="${a.id}" title="Show the fish in this area"><b style="background:${a.color}">${a.letter}</b><span>${esc(a.name)}</span><button data-zoom-area="${a.id}" title="Zoom to area">⤢</button><button data-remove-area="${a.id}" aria-label="Remove area">×</button></div>`).join('')
       : '<p class="px-muted">No areas yet.</p>';
     $('#px-where-sum').textContent = state.areas.length ? `${state.areas.length} area${state.areas.length > 1 ? 's' : ''} selected` : 'Add one or more areas';
     $('[data-step="where"]').classList.toggle('done', state.areas.length > 0);
@@ -529,6 +534,7 @@
     refreshFish();
     changed(false);
     renderFishLists();
+    if (state.activeArea) renderAreaBox();
     if (state.view && state.view.kind === 'fish') {
       if (state.focus) focusFish(state.focus);
       else showResults();
@@ -538,6 +544,7 @@
   function focusFish(sci, record) {
     state.focus = sci;
     renderFishLists();
+    if (state.activeArea) renderAreaBox();
     const row = $(`#px-left .px-fish.focus`);
     if (row) row.scrollIntoView({ block: 'nearest' });
     showDetail(profileHtml(sci, record));
@@ -582,9 +589,31 @@
   function areasChanged() {
     refreshFish();
     loadFound();
+    renderAreaBox();
   }
 
-  // Every fish species OBIS has recorded in the chosen areas, merged across areas.
+  // Every fish species OBIS has recorded in one area (cached per area).
+  function areaChecklist(a) {
+    if (!state.areaFish.has(a.id)) {
+      const wkt = `POLYGON((${bboxPolygon(a.bbox).coordinates[0].map((p) => p.join(' ')).join(',')}))`;
+      const job = Promise.all(FISH_TAXA.map(async (taxon) => {
+        const r = await fetch(`${OBIS}/checklist?${new URLSearchParams({ scientificname: taxon, geometry: wkt, size: 200 })}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return (await r.json()).results || [];
+      })).then((lists) => {
+        const counts = new Map();
+        for (const t of lists.flat()) {
+          if ((t.taxonRank || '').toLowerCase() === 'species') counts.set(t.scientificName, (counts.get(t.scientificName) || 0) + (t.records || 0));
+        }
+        return [...counts].map(([scientificName, records]) => ({ scientificName, records })).sort((x, y) => y.records - x.records);
+      });
+      job.catch(() => state.areaFish.delete(a.id)); // allow a retry later
+      state.areaFish.set(a.id, job);
+    }
+    return state.areaFish.get(a.id);
+  }
+
+  // Every fish species recorded in the chosen areas, merged across areas.
   async function loadFound() {
     const seq = ++state.foundSeq;
     if (!state.areas.length) {
@@ -595,14 +624,9 @@
     renderFishLists();
     try {
       const counts = new Map();
-      await Promise.all(state.areas.flatMap((a) => FISH_TAXA.map(async (taxon) => {
-        const wkt = `POLYGON((${bboxPolygon(a.bbox).coordinates[0].map((p) => p.join(' ')).join(',')}))`;
-        const r = await fetch(`${OBIS}/checklist?${new URLSearchParams({ scientificname: taxon, geometry: wkt, size: 200 })}`);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        for (const t of (await r.json()).results || []) {
-          if ((t.taxonRank || '').toLowerCase() === 'species') counts.set(t.scientificName, (counts.get(t.scientificName) || 0) + (t.records || 0));
-        }
-      })));
+      for (const list of await Promise.all(state.areas.map(areaChecklist))) {
+        for (const t of list) counts.set(t.scientificName, (counts.get(t.scientificName) || 0) + t.records);
+      }
       if (seq !== state.foundSeq) return;
       state.found = [...counts].map(([scientificName, records]) => ({ scientificName, records })).sort((x, y) => y.records - x.records);
     } catch (err) {
@@ -610,6 +634,58 @@
       state.found = err.message;
     }
     renderFishLists();
+  }
+
+  // ---- Area box: when an area is selected, a box on the map lists every fish in it.
+
+  function setActiveArea(id) {
+    state.activeArea = id;
+    drawAreas();
+    renderAreas();
+    renderAreaBox();
+  }
+
+  async function renderAreaBox() {
+    const box = $('#px-areabox');
+    const a = state.areas.find((x) => x.id === state.activeArea);
+    if (!a) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    box.style.setProperty('--area', a.color);
+    const head = `<header><b>${a.letter}</b><div><strong>Fish in this area</strong><small>${esc(a.name)}</small></div>
+      <button data-zoom-area="${a.id}" title="Zoom to area">⤢</button><button id="px-areabox-close" aria-label="Close">×</button></header>`;
+    if (!box.dataset.area || box.dataset.area !== a.id) box.innerHTML = `${head}<p class="px-muted">Finding every fish recorded here…</p>`;
+    box.dataset.area = a.id;
+    let list;
+    try {
+      list = await areaChecklist(a);
+    } catch (err) {
+      if (state.activeArea === a.id) box.innerHTML = `${head}<p class="px-muted">Unavailable: ${esc(err.message)}</p>`;
+      return;
+    }
+    if (state.activeArea !== a.id) return;
+    const q = ($('#px-areabox-filter') || {}).value || '';
+    const rows = list.filter((t) => `${t.scientificName} ${(guideFor(t.scientificName) || {}).name || ''}`.toLowerCase().includes(q.toLowerCase()));
+    box.innerHTML = `${head}
+      <p class="px-areabox-sum"><strong>${fmt(list.length)}</strong> fish species recorded here${list.length >= 200 ? ' (top 200 per group)' : ''}</p>
+      ${list.length ? `<input id="px-areabox-filter" class="px-filter" placeholder="Filter these fish" value="${esc(q)}">` : ''}
+      <div class="px-areabox-list">${rows.length
+        ? rows.map((t) => {
+            const guide = guideFor(t.scientificName);
+            const on = state.sel.fish.has(t.scientificName);
+            return `<button class="px-areafish${on ? ' on' : ''}${state.focus === t.scientificName ? ' focus' : ''}" data-area-fish="${esc(t.scientificName)}" data-name="${esc(guide ? guide.name : t.scientificName)}">
+              ${on ? `<i class="px-swatch" style="background:${colorFor(t.scientificName)}"></i>` : '<i class="px-swatch px-empty-dot"></i>'}
+              <span>${guide ? `${esc(guide.name)}<small><i>${esc(t.scientificName)}</i></small>` : `<i>${esc(t.scientificName)}</i>`}</span><small>${fmt(t.records)}</small></button>`;
+          }).join('')
+        : `<p class="px-muted">${list.length ? 'No match.' : 'No fish records in OBIS for this area yet.'}</p>`}</div>
+      ${list.length ? '<button class="px-ghost px-wide" id="px-areabox-all">Show every fish record here on the map</button>' : ''}`;
+    const filter = $('#px-areabox-filter');
+    if (filter && q) {
+      filter.focus();
+      filter.setSelectionRange(q.length, q.length);
+    }
   }
 
   // Plots every selected fish in every area (and only there).
@@ -1035,7 +1111,13 @@
     if (!cart) return;
     const c = Cesium.Cartographic.fromCartesian(cart);
     const lon = Cesium.Math.toDegrees(c.longitude), lat = Cesium.Math.toDegrees(c.latitude);
-    if (state.clickToAdd) return addArea(coordName(lon, lat), areaAround(lon, lat, state.size));
+    const inside = state.areas.filter((a) => inBox(lon, lat, a.bbox));
+    if (inside.length) {
+      // Smallest area wins when they overlap.
+      const size = (a) => (a.bbox[2] - a.bbox[0] + 360) % 360 * (a.bbox[3] - a.bbox[1]) || 1e9;
+      setActiveArea(inside.sort((x, y) => size(x) - size(y))[0].id);
+      if (!state.boundaryProviders.length) return;
+    } else if (state.clickToAdd) return addArea(coordName(lon, lat), areaAround(lon, lat, state.size));
     const zones = [];
     for (const { provider, def } of state.boundaryProviders) {
       for (const f of provider.featuresAt(lon, lat)) zones.push(zoneHtml(def, f.props));
@@ -1161,7 +1243,25 @@
     basemap.id = 'px-basemap';
     basemap.innerHTML = BASEMAPS.map((b) => `<button data-basemap="${b.id}">${b.label}</button>`).join('') +
       `<label><input type="checkbox" id="px-labels" ${state.showLabels ? 'checked' : ''}> Labels</label>`;
-    mapArea.append(legend, hint, vsearch, basemap);
+    const areabox = document.createElement('section');
+    areabox.id = 'px-areabox';
+    areabox.hidden = true;
+    areabox.setAttribute('aria-label', 'Fish in the selected area');
+    mapArea.append(legend, hint, vsearch, basemap, areabox);
+    areabox.addEventListener('click', (e) => {
+      if (e.target.id === 'px-areabox-close') return setActiveArea(null);
+      if (e.target.id === 'px-areabox-all') {
+        for (const taxon of FISH_TAXA) selectFish(taxon, fishInfo(taxon).name);
+        return;
+      }
+      const fish = e.target.closest('[data-area-fish]');
+      if (fish) selectFish(fish.dataset.areaFish, fish.dataset.name);
+      const zoom = e.target.closest('[data-zoom-area]');
+      if (zoom) zoomTo(state.areas.find((a) => a.id === zoom.dataset.zoomArea).bbox);
+    });
+    areabox.addEventListener('input', (e) => {
+      if (e.target.id === 'px-areabox-filter') renderAreaBox();
+    });
     basemap.addEventListener('click', (e) => {
       const b = e.target.closest('[data-basemap]');
       if (b) setBasemap(b.dataset.basemap);
@@ -1233,6 +1333,9 @@
       state.focus = null;
       state.foundSeq++;
       state.found = null;
+      state.activeArea = null;
+      state.areaFish = new Map();
+      renderAreaBox();
       state.shown = false;
       state.dirty = false;
       state.clickToAdd = true;
@@ -1253,9 +1356,10 @@
       if (q.length >= 3) searchVessels(q);
     };
     document.addEventListener('click', (e) => {
-      const el = e.target.closest('[data-remove-area],[data-zoom-area],[data-preset],[data-vessel],[data-focus-fish],[data-unselect-fish]');
+      const el = e.target.closest('[data-remove-area],[data-zoom-area],[data-preset],[data-vessel],[data-focus-fish],[data-unselect-fish],[data-select-area]');
       if (!el || !el.closest('#px-left, #px-right')) return;
       if (el.dataset.removeArea) removeArea(el.dataset.removeArea);
+      else if (el.dataset.selectArea && !e.target.closest('button')) setActiveArea(el.dataset.selectArea);
       else if (el.dataset.zoomArea) zoomTo(state.areas.find((a) => a.id === el.dataset.zoomArea).bbox);
       else if (el.dataset.preset) {
         const p = PRESETS[+el.dataset.preset];
