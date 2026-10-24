@@ -541,6 +541,48 @@
     }
   }
 
+  function selectMany(list) {
+    for (const sci of list) if (!state.sel.fish.has(sci)) state.sel.fish.set(sci, { name: fishInfo(sci).name });
+    refreshFish();
+    changed(false);
+    renderFishLists();
+    if (state.activeArea) renderAreaBox();
+  }
+
+  function unselectMany(list) {
+    for (const sci of list) state.sel.fish.delete(sci);
+    const lostFocus = state.focus && !state.sel.fish.has(state.focus);
+    if (lostFocus) state.focus = null;
+    refreshFish();
+    changed(false);
+    renderFishLists();
+    if (state.activeArea) renderAreaBox();
+    if (lostFocus && state.view && state.view.kind === 'fish') showResults();
+  }
+
+  // The fish "Select all" covers: everything recorded in the areas that matches the filter.
+  function availableFish() {
+    if (!Array.isArray(state.found)) return [];
+    const q = ($('#px-species-filter').value || '').toLowerCase();
+    return state.found
+      .filter((t) => `${t.scientificName} ${(guideFor(t.scientificName) || {}).name || ''}`.toLowerCase().includes(q))
+      .map((t) => t.scientificName);
+  }
+
+  function renderSelectAll() {
+    const box = $('#px-fish-all');
+    const avail = availableFish();
+    const on = avail.filter((sci) => state.sel.fish.has(sci)).length;
+    box.disabled = !avail.length;
+    box.checked = avail.length > 0 && on === avail.length;
+    box.indeterminate = on > 0 && on < avail.length;
+    const filtered = !!$('#px-species-filter').value;
+    $('#px-fish-all-note').textContent = !state.areas.length ? 'Add an area first'
+      : state.found === 'loading' ? 'Finding the fish in your areas…'
+      : !avail.length ? (filtered ? 'No recorded fish match the filter' : 'No fish recorded in your areas')
+      : `${fmt(avail.length)} species${filtered ? ' matching the filter' : ''}${on ? ` · ${fmt(on)} on the map` : ''}`;
+  }
+
   function focusFish(sci, record) {
     state.focus = sci;
     renderFishLists();
@@ -584,6 +626,7 @@
         : '<p class="px-muted">No fish records in OBIS for your areas.</p>';
     }
     $('#px-found-count').textContent = Array.isArray(state.found) ? `(${fmt(state.found.length)})` : '';
+    renderSelectAll();
   }
 
   function areasChanged() {
@@ -694,11 +737,15 @@
     const live = () => seq === state.fishSeq;
     state.fishPoints.removeAll();
     state.fishStats = new Map();
+    // Keep the globe responsive when many fish are selected: ~40k points in total at most.
+    const queries = state.sel.fish.size * Math.max(1, state.areas.length);
+    const limit = Math.max(200, Math.min(5000, Math.floor(40000 / Math.max(1, queries))));
+    const tasks = [];
     for (const [sci] of state.sel.fish) {
       const stats = new Map();
       state.fishStats.set(sci, stats);
       for (const a of state.areas) {
-        fetch(`/api/observations?${new URLSearchParams({ species: sci, bbox: a.bbox.join(',') })}`)
+        tasks.push(() => fetch(`/api/observations?${new URLSearchParams({ species: sci, bbox: a.bbox.join(','), limit })}`)
           .then(async (r) => {
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
@@ -720,9 +767,14 @@
             state.viewer.scene.requestRender();
             renderCardFish();
             updateProfile();
-          });
+          }));
       }
     }
+    // A few requests at a time, so selecting every fish doesn't flood OBIS.
+    const worker = async () => {
+      while (tasks.length && live()) await tasks.shift()();
+    };
+    for (let i = 0; i < 6; i++) worker();
     renderCardFish();
     renderLegend();
     updateProfile();
@@ -903,7 +955,9 @@
     const rows = [
       ...state.areas.map((a) => [a.color, `${a.letter} · ${a.name}`, 'square']),
       ...heat.map((d) => [d.color, d.label, 'bar']),
-      ...[...state.sel.fish.keys()].map((sci) => [colorFor(sci), fishInfo(sci).name, 'dot']),
+      ...(state.sel.fish.size > 8
+        ? [[FISH_COLORS[0], `${fmt(state.sel.fish.size)} fish species (colours repeat)`, 'dot']]
+        : [...state.sel.fish.keys()].map((sci) => [colorFor(sci), fishInfo(sci).name, 'dot'])),
       ...events.map((t) => [t.color, t.label, 'dot']),
       ...bounds.map((d) => [d.stroke, d.label, 'line']),
     ];
@@ -1188,6 +1242,7 @@
           <div class="px-dates"><label>From<input type="date" id="px-start" value="${state.start}"></label><label>To<input type="date" id="px-end" value="${state.end}"></label></div>
           <details open><summary>Fish <small>OBIS</small></summary>
             <p class="px-muted">Click a fish to put it on the map and see its profile. Untick to remove it.</p>
+            <label class="px-check px-selectall"><input type="checkbox" id="px-fish-all"><span>Select all fish recorded in your areas<small id="px-fish-all-note">Add an area first</small></span></label>
             <input id="px-species-filter" class="px-filter" placeholder="Filter fish">
             <div class="px-sub">Recorded in your areas <span id="px-found-count"></span></div>
             <div id="px-found" class="px-list"></div>
@@ -1282,6 +1337,7 @@
     };
     // What
     $('#px-species-filter').oninput = renderFishLists;
+    $('#px-fish-all').onchange = (e) => (e.target.checked ? selectMany(availableFish()) : unselectMany(availableFish()));
     $('#px-any').onsubmit = (e) => {
       e.preventDefault();
       const name = $('#px-any input').value.trim();

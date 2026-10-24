@@ -240,10 +240,13 @@ class Handler(SimpleHTTPRequestHandler):
         bbox = None
         if query.get("bbox"):
             bbox = [float(v) for v in query["bbox"][0].split(",")]
-        key = f"obs:{species}:{bbox}"
+        limit = MAX_RECORDS
+        if query.get("limit"):
+            limit = max(1, min(MAX_RECORDS, int(query["limit"][0])))
+        key = f"obs:{species}:{bbox}:{limit}"
         data = cache.get(key)
         if data is None:
-            data = json.dumps(obis_occurrences(species, bbox)).encode()
+            data = json.dumps(obis_occurrences(species, bbox, limit)).encode()
             cache.put(key, data)
         self.send_bytes(200, "application/json", data)
 

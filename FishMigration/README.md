@@ -18,6 +18,8 @@ Nothing is drawn on the globe until you ask for it, and then only inside the are
      field-guide species and groups, or any other species/genus/family. **One click on a fish**
      puts it on the map, highlights it in the list and opens its profile on the right — no need
      to press Show. Click another fish to switch; untick to remove it.
+     **Select all fish recorded in your areas** (under the instructions) ticks every species in
+     the list, or only those matching the filter; untick it to clear them.
    - **Fishing activity (GFW 4Wings):** fishing effort, all vessel traffic, satellite radar (SAR)
      detections that reveal vessels with AIS switched off.
    - **Vessel events (GFW Events):** fishing, encounters (possible transshipment), loitering, port

@@ -196,6 +196,10 @@ body.px-on .details { overflow: hidden; }
 .px-area:hover { border-color: #999; }
 .px-area.active { border-color: #111; box-shadow: inset 3px 0 0 #111; }
 
+.px-selectall { border: 1px solid #ddd; border-radius: 3px; padding: 8px 10px; margin: 4px 0 8px; font-weight: 600; }
+.px-selectall small { font-weight: 400; }
+.px-selectall:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+
 @media (max-width: 880px) {
   body.px-on .details { display: block; }
   #px-right { height: auto; }
