@@ -49,17 +49,25 @@ OBS_FIELDS = ",".join([
 USER_AGENT = "Pelagic/1.0 (HowdyHackathon fish atlas)"
 
 
+def clean_token(raw):
+    """Keeps only characters a GFW token (a JWT) can contain. Copying a long token
+    out of a chat window or document often adds invisible zero-width spaces, line
+    breaks or smart quotes, which break the HTTP Authorization header."""
+    return re.sub(r"[^A-Za-z0-9._-]", "", raw.replace("GFW_TOKEN", ""))
+
+
 def load_token():
-    token = os.environ.get("GFW_TOKEN", "").strip()
+    token = clean_token(os.environ.get("GFW_TOKEN", ""))
     if token:
         return token
     env_path = os.path.join(ROOT, ".env")
     if os.path.exists(env_path):
-        with open(env_path) as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if key == "GFW_TOKEN" and value:
-                    return value.strip().strip('"').strip("'")
+        with open(env_path, encoding="utf-8", errors="ignore") as f:
+            text = f.read()
+        # Accept GFW_TOKEN=... even if the line was wrapped or prefixed with junk.
+        match = re.search(r"GFW_TOKEN\s*=\s*(.+)", text, re.S)
+        if match:
+            return clean_token(match.group(1).split("\n\n")[0])
     return ""
 
 
@@ -255,6 +263,8 @@ class Handler(SimpleHTTPRequestHandler):
         status, ctype, data = fetch(full, method, body, headers, timeout=120)
         if status == 200:
             cache.put(key, (status, ctype, data))
+        elif gfw:
+            sys.stderr.write(f"[pelagic] GFW answered {status} for {target}: {data[:300]!r}\n")
         self.send_bytes(status, ctype, data, cache_seconds=3600 if status == 200 else 0)
 
 
@@ -281,8 +291,12 @@ if __name__ == "__main__":
     url = f"http://127.0.0.1:{port}/"
     print(f"Pelagic running at {url}  (press Ctrl+C to stop)")
     print(f"  OBIS records per species query: {MAX_RECORDS:,}")
-    print("  Global Fishing Watch: " + ("token loaded" if GFW_TOKEN else
-          "no token (set GFW_TOKEN or create .env) - GFW layers disabled"))
+    if not GFW_TOKEN:
+        print("  Global Fishing Watch: no token (set GFW_TOKEN or create .env) - GFW layers disabled")
+    elif GFW_TOKEN.count(".") != 2:
+        print(f"  Global Fishing Watch: token looks incomplete ({len(GFW_TOKEN)} characters) - re-copy it into .env")
+    else:
+        print(f"  Global Fishing Watch: token loaded ({len(GFW_TOKEN)} characters)")
     if not os.environ.get("NO_BROWSER"):
         threading.Timer(0.8, webbrowser.open, [url]).start()
     server.serve_forever()
