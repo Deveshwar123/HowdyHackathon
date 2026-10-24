@@ -1074,6 +1074,14 @@
     state.labels = prims.add(new Cesium.LabelCollection());
     new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas).setInputAction(onClick, Cesium.ScreenSpaceEventType.LEFT_CLICK);
     viewer.scene.camera.moveEnd.addEventListener(() => viewer.scene.requestRender());
+    // The explorer draws only with its own primitives. Anything the atlas adds to
+    // viewer.entities (e.g. from an older cached bundle) is removed straight away.
+    viewer.entities.collectionChanged.addEventListener(() => {
+      if (viewer.entities.values.length) setTimeout(() => {
+        viewer.entities.removeAll();
+        viewer.scene.requestRender();
+      }, 0);
+    });
     if (!$('#px-left')) buildPanels();
 
     try {

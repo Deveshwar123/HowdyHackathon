@@ -180,6 +180,13 @@ class Handler(SimpleHTTPRequestHandler):
         if "/api/" in self.path or (args and str(args[1])[0] in "45"):
             sys.stderr.write("[pelagic] " + (fmt % args) + "\n")
 
+    def end_headers(self):
+        # Static files (the app itself) must never come from a stale browser cache:
+        # an old bundle would bring back behaviour that has since been changed.
+        if not self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
+        super().end_headers()
+
     def send_bytes(self, status, ctype, body, cache_seconds=0):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
