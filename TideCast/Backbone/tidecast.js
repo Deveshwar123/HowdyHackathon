@@ -96,6 +96,13 @@ const NOISE = /* glsl */ `
 // stays the same from orbit down to the water.
 const blank = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
 blank.needsUpdate = true;
+const CONT_HOME = { box: [-112, 18, -80, 42], tex: tex('assets/continent.jpg'), mask: tex('assets/continent-mask.png', false) };
+const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+white.needsUpdate = true;
+const CONT = {
+  tex: { value: CONT_HOME.tex }, mask: { value: CONT_HOME.mask },
+  box: { value: new THREE.Vector4(...CONT_HOME.box) }, land: { value: 0 },
+};
 const SAT = {
   region: { value: blank }, lake: { value: blank }, mask: { value: blank },
   regionB: { value: new THREE.Vector4(0, 0, 1, 1) }, lakeB: { value: new THREE.Vector4(0, 0, 1, 1) },
@@ -122,10 +129,9 @@ const earthMat = new THREE.ShaderMaterial({
     uRelief: { value: tex('assets/earth-relief.jpg', false) },
     uWater: { value: tex('assets/earth-water.jpg', false) },
     uRegion: SAT.region, uLakeSat: SAT.lake, uRegionB: SAT.regionB, uLakeB: SAT.lakeB, uSatReady: SAT.ready,
-    // Sharp cloud-free land for the zoom (ESA WorldCover Sentinel-2 composite, ~0.9 km/px):
-    // 112°W–80°W, 18°N–42°N, where the camera turns and zooms in.
-    uCont: { value: tex('assets/continent.jpg') }, uContMask: { value: tex('assets/continent-mask.png', false) },
-    uContB: { value: new THREE.Vector4(-112, 18, -80, 42) },
+    // Sharp land for the zoom: built in for 112°W–80°W, 18°N–42°N (ESA WorldCover Sentinel-2
+    // composite, ~0.9 km/px); anywhere else setContinent() fetches a box around the water.
+    uCont: CONT.tex, uContMask: CONT.mask, uContB: CONT.box, uContLand: CONT.land,
     uRegionMix: { value: 0 }, uLakeMix: { value: 0 },
     uPin: { value: new THREE.Vector2(HOME.lon, HOME.lat) }, uTarget: { value: new THREE.Vector2(HOME.lon, HOME.lat) },
     uAltKm: { value: 10000 }, uPing: { value: 0 }, uPingA: { value: 0 }, uPulse: { value: 0 }, uFound: { value: 0 },
@@ -143,7 +149,7 @@ const earthMat = new THREE.ShaderMaterial({
     }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D uDay, uNight, uRelief, uWater, uRegion, uLakeSat, uCont, uContMask;
-    uniform vec4 uRegionB, uLakeB, uContB; uniform vec2 uPin, uTarget;
+    uniform vec4 uRegionB, uLakeB, uContB; uniform vec2 uPin, uTarget; uniform float uContLand;
     uniform float uRegionMix, uLakeMix, uSatReady, uAltKm, uPing, uPingA, uPulse, uFound, uHaze, uTime;
     uniform vec3 uSun;
     varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vNorth;
@@ -172,11 +178,13 @@ const earthMat = new THREE.ShaderMaterial({
       vec3 Nb = normalize(N - (east * hx + north * hy) * 2.2 * (1.0 - decal));
 
       vec3 day = texture2D(uDay, vUv).rgb;
+      float water = texture2D(uWater, vUv).r;
       vec2 cq = (ll - uContB.xy) / (uContB.zw - uContB.xy);
       float cIn = edgeMask(cq, 0.03) * texture2D(uContMask, cq).r;
+      // Fetched imagery has no coastline mask: keep the Blue Marble ocean.
+      cIn *= mix(1.0, smoothstep(0.7, 0.2, water), uContLand);
       if (cIn > 0.0) day = mix(day, texture2D(uCont, cq).rgb, cIn);
       day = max(mix(vec3(dot(day, vec3(0.299, 0.587, 0.114))), day, 1.2), 0.0);
-      float water = texture2D(uWater, vUv).r;
       float shallow = smoothstep(0.02, 0.12, max(day.g - day.b * 0.55, 0.0)) * water;
       day = mix(day, day * vec3(0.75, 1.15, 1.18) + vec3(0.0, 0.02, 0.03), shallow * 0.6);
       day = mix(day, day * vec3(1.12, 1.02, 0.86), (1.0 - water) * 0.35);
@@ -652,8 +660,32 @@ function maskCanvas(b, shape, w) {
   return t;
 }
 
+// The country-scale picture around the water, so the zoom is sharp wherever the user is.
+let contToken = 0;
+function useCont(t, mask, box, land) {
+  if (CONT.tex.value !== CONT_HOME.tex && CONT.tex.value !== t) CONT.tex.value.dispose();
+  CONT.tex.value = t;
+  CONT.mask.value = mask;
+  CONT.box.value.set(...box);
+  CONT.land.value = land;
+}
+async function setContinent(w) {
+  const token = ++contToken;
+  const lat = clamp(w.lat, -72, 72);
+  const box = [Math.max(-180, w.lon - 12), lat - 8, Math.min(180, w.lon + 12), lat + 8];
+  const [hw, hs, he, hn] = CONT_HOME.box;
+  if (box[0] >= hw && box[1] >= hs && box[2] <= he && box[3] <= hn) return useCont(CONT_HOME.tex, CONT_HOME.mask, CONT_HOME.box, 0);
+  const h = clamp(Math.round((2048 * (box[3] - box[1])) / ((box[2] - box[0]) * Math.cos(lat * D2R))), 512, 2048);
+  try {
+    const t = await loadTex(`/api/sat?bbox=${box.join(',')}&w=2048&h=${h}`);
+    if (token !== contToken) return t.dispose();
+    useCont(t, white, box, 1);
+  } catch { /* imagery unreachable: Blue Marble only */ }
+}
+
 async function setWater(w) {
   const token = ++satToken;
+  setContinent(w);
   loc.water = w;
   loc.km = Math.max(0.5, kmBetween(loc.user, w));
   earthMat.uniforms.uTarget.value.set(w.lon, w.lat);

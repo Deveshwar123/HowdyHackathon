@@ -514,7 +514,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def satellite(self, query):
         w, s, e, n = [float(v) for v in (query.get("bbox") or [""])[0].split(",")]
-        if not (-180 <= w < e <= 180 and -85 <= s < n <= 85 and e - w <= 5 and n - s <= 5):
+        if not (-180 <= w < e <= 180 and -85 <= s < n <= 85 and e - w <= 30 and n - s <= 30):
             return self.send_json({"error": "bad bbox"}, 400)
         width = max(64, min(2048, int((query.get("w") or ["1024"])[0])))
         height = max(64, min(2048, int((query.get("h") or ["1024"])[0])))
