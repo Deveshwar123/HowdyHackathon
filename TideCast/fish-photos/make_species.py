@@ -57,6 +57,9 @@ PHOTOS = {
 }
 
 
+# Photos where the fish faces right: mirrored so every fish faces left like the rest.
+FLIP = {"alligator-gar", "arctic-grayling", "bonefish", "common-snook", "bowfin"}
+
 # Photos with a pale halo, blocky patch or soft shadow around the fish: remove any light grey.
 LOOSE = {"flathead-catfish.jpg", "yellow-perch.jpg", "Chain Pickerel.png", "Spotted Seatrout.png", "Black Drum.png"}
 
@@ -88,6 +91,8 @@ def fish_mask(rgba, loose=False):
 
 def process(src, dst):
     im = Image.open(src).convert("RGBA")
+    if os.path.basename(dst).rsplit(".", 1)[0] in FLIP:
+        im = im.transpose(Image.FLIP_LEFT_RIGHT)
     a = np.asarray(im)
     mask = fish_mask(a, os.path.basename(src) in LOOSE)
     ys, xs = np.nonzero(mask)

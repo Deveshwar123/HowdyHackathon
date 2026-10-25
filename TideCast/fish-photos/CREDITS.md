@@ -4,9 +4,7 @@
 - **King Mackerel** (`king-mackerel.jpg`): H. L. Todd, Public domain, https://commons.wikimedia.org/wiki/File:FMIB_50948_Cero_or_Kingfish.jpeg
 - **Alligator Gar** (`alligator-gar.jpg`): Duane Raver, U.S. Fish and Wildlife Service, Public domain, https://commons.wikimedia.org/wiki/File:Alligator_gar_fish_(white_background).jpg
 - **Warmouth** (`warmouth.jpg`): H. L. Todd, Public domain, https://commons.wikimedia.org/wiki/File:FMIB_51019_War-Mouth_Bass.jpeg
-- **Freshwater Drum** (`freshwater-drum.jpg`): USFWS Mountain Prairie, Public domain, https://commons.wikimedia.org/wiki/File:Freshwater_Drum_(49670317296).jpg
 - **Bowfin** (`bowfin.jpg`): Duane Raver/U.S. Fish and Wildlife Service, Public domain, https://commons.wikimedia.org/wiki/File:Amia_calva_(white_background).jpg
-- **Longnose Gar** (`longnose-gar.jpg`): USFWS Mountain-Prairie, CC BY 2.0, https://commons.wikimedia.org/wiki/File:Longnose_Gar_(47488785662).jpg
 - **Coho Salmon** (`coho-salmon.jpg`): NOAA, Public domain, https://commons.wikimedia.org/wiki/File:Oncorhynchus_keta.jpeg
 - **Atlantic Croaker** (`atlantic-croaker.jpg`): H. L. Todd, Public domain, https://commons.wikimedia.org/wiki/File:FMIB_50995_Croaker.jpeg
 - **Bluefish** (`bluefish.png`): Unknown authorUnknown author, Public domain, https://commons.wikimedia.org/wiki/File:Pomatomus_saltatrix.png
@@ -14,13 +12,9 @@
 - **Florida Pompano** (`florida-pompano.jpg`): H. L. Todd, Public domain, https://commons.wikimedia.org/wiki/File:FMIB_50960_Common_Pompano.jpeg
 - **Common Snook** (`common-snook.png`): Clara Costa D'Elia, CC BY 4.0, https://commons.wikimedia.org/wiki/File:Centropomus_undecimalis.png
 - **Bonefish** (`bonefish.jpg`): Iconographia Zoologica, Public domain, https://commons.wikimedia.org/wiki/File:Albula_conorhynchus_-_1700-1880_-_Print_-_Iconographia_Zoologica_-_Special_Collections_University_of_Amsterdam_-_(white_background).jpg
-- **Gag Grouper** (`gag-grouper.jpg`): H. L. Todd, Public domain, https://commons.wikimedia.org/wiki/File:FMIB_51034_Pensacola_Black_Grouper.jpeg
 - **Yellowfin Tuna** (`yellowfin-tuna.jpg`): Hugues Evano (IFREMER, Délégation océan Indien (DOI), Département Ressources Biologiques et Environnement (RBE), F-97420, CC BY 4.0, https://commons.wikimedia.org/wiki/File:Thon_albacore_(Thunnus_albacares)_(Ifremer_00764-87616).jpg
 - **Sailfish** (`sailfish.jpg`): This illustration was made by Citron
 You must credit this : Citron / CC-BY-SA-3.0, CC BY-SA 3.0, https://commons.wikimedia.org/wiki/File:Istiophorus_platypterus.jpg
-- **Sauger** (`sauger.jpg`): USFWS Mountain Prairie, Public domain, https://commons.wikimedia.org/wiki/File:Sauger_(51246897698).jpg
-- **Paddlefish** (`paddlefish.jpg`): USFWS Mountain-Prairie, Public domain, https://commons.wikimedia.org/wiki/File:Leucistic_Fingerling_American_Paddlefish.jpg
-- **Lake Sturgeon** (`lake-sturgeon.jpg`): USFWS Mountain Prairie, Public domain, https://commons.wikimedia.org/wiki/File:Juvenile_Acipenser_fulvescens_white_background.jpg
 - **Arctic Grayling** (`arctic-grayling.jpg`): A. Hoen and Co., Public domain, https://commons.wikimedia.org/wiki/File:Arctic_Grayling_Thymallus_arcticus_arcticus_(white_background).jpg
 - **Bigmouth Buffalo** (`bigmouth-buffalo.jpg`): Edgar R. Waite, Public domain, https://commons.wikimedia.org/wiki/File:Ictiobus_cyprinellus1.jpg
 - **Sockeye Salmon** (`sockeye-salmon.jpg`): Timothy Knepp of the Fish and Wildlife Service, Public domain, https://commons.wikimedia.org/wiki/File:Oncorhynchus_nerka.flipped.jpg

@@ -22,6 +22,7 @@ import os
 import ssl
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -60,10 +61,30 @@ def env(name):
     return None
 
 
-def get(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=timeout, context=SSL) as r:
-        return r.read(12_000_000)
+_last = [0.0]
+
+
+def get(url, timeout=30, tries=6):
+    """Polite GET: at most ~1 request a second, and wait it out when the site says "slow down"."""
+    for attempt in range(tries):
+        wait = 1.2 - (time.time() - _last[0])
+        if wait > 0:
+            time.sleep(wait)
+        _last[0] = time.time()
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout, context=SSL) as r:
+                return r.read(12_000_000)
+        except urllib.error.HTTPError as e:
+            if e.code not in (429, 500, 502, 503, 504) or attempt == tries - 1:
+                raise
+            try:
+                pause = float(e.headers.get("Retry-After") or 0)
+            except ValueError:
+                pause = 0
+            pause = max(pause, 5 * 2 ** attempt)          # 5, 10, 20, 40, 80 s
+            print(f"   site busy ({e.code}), waiting {int(pause)} s...")
+            time.sleep(min(pause, 120))
 
 
 def score_text(text):
@@ -196,8 +217,8 @@ def main(only):
         print(f"{name} ({sci})")
         (done if fetch(sid, name, sci) else missed).append(sid)
         print("   ->", "saved" if sid in done else "nothing usable found")
-    if done:
-        make_species.main(done)
+        if sid in done:
+            make_species.main([sid])              # cut out right away, so a stopped run keeps its work
     print(f"\n{len(done)} new pictures.", "Still missing: " + ", ".join(missed) if missed else "")
 
 
