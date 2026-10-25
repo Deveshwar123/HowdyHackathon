@@ -35,6 +35,8 @@ water).
 - Satellite imagery (Lake Bryan / College Station): Copernicus Sentinel-2 L2A (2025-04-10, tiles 14RQU
   and 14RQV), from the AWS Open Data `sentinel-cogs` bucket; the water mask is from its NDWI.
   Contains modified Copernicus Sentinel data 2025. Other places: Esri World Imagery at runtime.
+- Continental close-up (US South / Mexico, `continent.jpg`): ESA WorldCover 2021 Sentinel-2 cloud-free
+  composite (© ESA WorldCover project 2021, CC BY 4.0), contains modified Copernicus Sentinel data 2021.
 - Nearby waters: © OpenStreetMap contributors (ODbL), via the Overpass API.
 - Water normal map: three.js examples (`waternormals.jpg`, MIT).
 

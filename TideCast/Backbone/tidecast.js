@@ -122,6 +122,10 @@ const earthMat = new THREE.ShaderMaterial({
     uRelief: { value: tex('assets/earth-relief.jpg', false) },
     uWater: { value: tex('assets/earth-water.jpg', false) },
     uRegion: SAT.region, uLakeSat: SAT.lake, uRegionB: SAT.regionB, uLakeB: SAT.lakeB, uSatReady: SAT.ready,
+    // Sharp cloud-free land for the zoom (ESA WorldCover Sentinel-2 composite, ~0.9 km/px):
+    // 112°W–80°W, 18°N–42°N, where the camera turns and zooms in.
+    uCont: { value: tex('assets/continent.jpg') }, uContMask: { value: tex('assets/continent-mask.png', false) },
+    uContB: { value: new THREE.Vector4(-112, 18, -80, 42) },
     uRegionMix: { value: 0 }, uLakeMix: { value: 0 },
     uPin: { value: new THREE.Vector2(HOME.lon, HOME.lat) }, uTarget: { value: new THREE.Vector2(HOME.lon, HOME.lat) },
     uAltKm: { value: 10000 }, uPing: { value: 0 }, uPingA: { value: 0 }, uPulse: { value: 0 }, uFound: { value: 0 },
@@ -138,8 +142,8 @@ const earthMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * mv;
     }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D uDay, uNight, uRelief, uWater, uRegion, uLakeSat;
-    uniform vec4 uRegionB, uLakeB; uniform vec2 uPin, uTarget;
+    uniform sampler2D uDay, uNight, uRelief, uWater, uRegion, uLakeSat, uCont, uContMask;
+    uniform vec4 uRegionB, uLakeB, uContB; uniform vec2 uPin, uTarget;
     uniform float uRegionMix, uLakeMix, uSatReady, uAltKm, uPing, uPingA, uPulse, uFound, uHaze, uTime;
     uniform vec3 uSun;
     varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vNorth;
@@ -168,6 +172,9 @@ const earthMat = new THREE.ShaderMaterial({
       vec3 Nb = normalize(N - (east * hx + north * hy) * 2.2 * (1.0 - decal));
 
       vec3 day = texture2D(uDay, vUv).rgb;
+      vec2 cq = (ll - uContB.xy) / (uContB.zw - uContB.xy);
+      float cIn = edgeMask(cq, 0.03) * texture2D(uContMask, cq).r;
+      if (cIn > 0.0) day = mix(day, texture2D(uCont, cq).rgb, cIn);
       day = max(mix(vec3(dot(day, vec3(0.299, 0.587, 0.114))), day, 1.2), 0.0);
       float water = texture2D(uWater, vUv).r;
       float shallow = smoothstep(0.02, 0.12, max(day.g - day.b * 0.55, 0.0)) * water;
