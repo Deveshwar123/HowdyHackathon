@@ -52,6 +52,20 @@ def metrics():
         return None
 
 
+def info():
+    """Facts about the shipped model (model_info.json): where it's from, how many photos it
+    was trained on, the length range."""
+    for d in [artifacts_dir()] + _dirs():
+        path = d and os.path.join(d, "model_info.json")
+        if path and os.path.exists(path):
+            try:
+                with open(path) as f:
+                    return json.load(f)
+            except (OSError, ValueError):
+                return None
+    return None
+
+
 _lock = threading.Lock()
 _predictor = None
 _failed = None

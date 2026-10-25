@@ -1,0 +1,11 @@
+{
+  "source": "https://github.com/fishsizeproject/fish-length-predictor",
+  "commit": "d90c80d",
+  "license": "MIT (see fish_length/LICENSE)",
+  "n_train": 2148,
+  "length_min_cm": 10.0,
+  "length_max_cm": 79.6,
+  "embedding": "DINOv2 ViT-g/14 (1536 features)",
+  "regressor": "FLAML AutoML XGBoost",
+  "note": "n_train and the length range are read from the trained scalers; the project publishes no test scores, so add metrics.json from your own evaluation to show measured accuracy."
+}

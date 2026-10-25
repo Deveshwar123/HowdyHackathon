@@ -855,7 +855,7 @@ async function renderStats() {
     const m = d.model || {};
     live = {
       ...src, species_known: d.species_known, avg_err_pct: d.avg_err == null ? null : Math.round(d.avg_err * 100),
-      model_mae_cm: m.mae_cm ?? null, model_r2_pct: m.r2 == null ? null : Math.max(0, m.r2 * 100), model_n_test: m.n_test ?? null,
+      model_mae_cm: m.mae_cm ?? null, model_r2_pct: m.r2 == null ? null : Math.max(0, m.r2 * 100), model_n_test: m.n_test ?? null, model_trained_on: m.trained_on ?? null,
     };
     live.knuckle_spans = 2;
     live.knuckle_weight_err_pct = m.knuckle_weight_err_pct ?? null;

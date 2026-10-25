@@ -319,7 +319,9 @@ def model_info():
     """What the home page and the catch page say about the length model."""
     st = length_ai.status()
     m = length_ai.metrics() or {}
+    facts = length_ai.info() or {}
     return {"available": st["available"], "reason": st["reason"], "ready": length_ai.ready(),
+            "trained_on": facts.get("n_train"), "source": facts.get("source"),
             "r2": m.get("r2"), "mae_cm": m.get("mae"), "n_test": m.get("n_test"),
             "n_train": m.get("n_train"), "mean_length_cm": m.get("mean_length"),
             # The knuckle method's built-in error: length ±LENGTH_ERROR_FRAC carried through

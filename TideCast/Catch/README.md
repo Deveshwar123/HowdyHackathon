@@ -27,10 +27,16 @@ Settings: `GEMINI_API_KEY` (or `TideCast/.env`), `TIDECAST_DB` (database path), 
 When it's installed, every catch is measured and scored from the model's length (the knuckle marks
 become a cross-check), and the home page's "The model" numbers come from its test results.
 
-1. `pip3 install -r TideCast/Catch/requirements-model.txt`
-2. Put the trained files in `TideCast/Catch/fish_length/artifacts/`: `automl_model.pkl`,
-   `features_scaler_model.pkl`, `length_scaler_model.pkl` and `metrics.json` (training writes
-   all four: `cd TideCast/Catch && python3 -m fish_length.cli_trainer data.csv --artifacts fish_length/artifacts`).
-3. Restart the server. The first start downloads DINOv2 (a few GB) once.
+The model and its trained files come from
+[fishsizeproject/fish-length-predictor](https://github.com/fishsizeproject/fish-length-predictor)
+(MIT, see `fish_length/LICENSE`); it was trained on 2,148 fish photos of 10–80 cm. The trained
+files are already in `fish_length/artifacts/`.
+
+1. Click **Install the length model** on the Log a catch page, or run
+   `pip3 install -r TideCast/Catch/requirements-model.txt`.
+2. Restart the server. The first catch downloads DINOv2 (a few GB) once.
+3. Optional: add `metrics.json` (written by `python3 -m fish_length.cli_trainer data.csv
+   --artifacts fish_length/artifacts`) to show measured accuracy on the home page instead of the
+   labelled estimates.
 
 Without it, the catch app measures from the angler's knuckles exactly as before.

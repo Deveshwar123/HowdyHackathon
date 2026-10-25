@@ -1,11 +1,13 @@
-# Optional: the learned fish-length model (fish_length/). The rest of TideCast needs nothing.
+# Optional: the learned fish-length model (fish_length/, from
+# github.com/fishsizeproject/fish-length-predictor, MIT). The rest of TideCast needs nothing.
 #   pip3 install -r TideCast/Catch/requirements-model.txt
-# Put the trained files in TideCast/Catch/fish_length/artifacts/ (see length_ai.py).
-torch
-torchvision
+# The trained files in fish_length/artifacts/ were pickled with these exact versions of
+# scikit-learn, FLAML and XGBoost, so those are pinned.
+torch>=2.2
+torchvision>=0.17
 numpy
 pillow
-scikit-learn
 pandas
-flaml[automl]
-xgboost
+scikit-learn==1.6.0
+flaml[automl]==2.3.2
+xgboost==2.1.3

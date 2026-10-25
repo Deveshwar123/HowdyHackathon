@@ -30,7 +30,7 @@ window.TIDECAST_STATS = {
   modelFallback: [
     { value: 3.5, prefix: '±', decimals: 1, suffix: ' cm', label: 'average length error', note: 'Learned model (DINOv2 + AutoML), from the photo alone', estimate: true },
     { value: 85, suffix: '%', label: 'of length variation explained (R²)', note: 'Expected on held-out catch photos', estimate: true },
-    { value: 0, label: 'API keys needed to measure', note: 'The length model runs on this computer' },
+    { live: 'model_trained_on', label: 'fish photos it learned from', note: 'Lengths 10–80 cm · runs on this computer, no API key' },
     { live: 'species_known', label: 'species it can score', note: 'Each with its own length–weight curve' },
   ],
   sources: [
