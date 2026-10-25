@@ -66,7 +66,13 @@
         if (d < 30) return `${Math.round(d)} day${Math.round(d) === 1 ? '' : 's'} ago`;
         return new Date(t * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       };
-      const art = (r, cls = '') => `<div class="fish-art r-${(r.rarity || 'common').toLowerCase()} ${cls}">${r.photo ? `<img src="/catch-photos/${esc(r.photo)}" alt="${esc(r.species)} caught by ${esc(r.angler)}" loading="lazy">` : window.fishArt(r.species)}</div>`;
+      const IMAGES = {};
+      const art = (r, cls = '') => {
+        const img = !r.photo && IMAGES[r.species];
+        return `<div class="fish-art r-${(r.rarity || 'common').toLowerCase()} ${cls}${img ? ' has-photo' : ''}">${r.photo
+          ? `<img src="/catch-photos/${esc(r.photo)}" alt="${esc(r.species)} caught by ${esc(r.angler)}" loading="lazy">`
+          : window.fishPicture(r.species, img)}</div>`;
+      };
       const rar = (r) => (r.rarity ? `<span class="rarity rarity-${r.rarity.toLowerCase()}">${esc(r.rarity)}</span>` : '');
       const lb = (w) => (w >= 10 ? w.toFixed(1) : w.toFixed(2));
       const sample = (r) => (r.sample ? ' <span class="tag" title="Demo entry">sample</span>' : '');
@@ -106,7 +112,8 @@
         $('#reset').innerHTML = end > 0 ? `<span>Weekly board resets in</span> <b>${days}d ${hours}h</b>` : '';
       }
 
-      fetch('/api/species').then((r) => r.json()).then((d) => {
+      const speciesReady = fetch('/api/species').then((r) => r.json()).catch(() => ({})).then((d) => {
+        for (const s of d.species || []) IMAGES[s.name] = s.image;
         const sel = $('#species');
         sel.innerHTML += (d.species || []).slice().sort((a, b) => a.name.localeCompare(b.name)).map((s) => `<option>${esc(s.name)}</option>`).join('');
         sel.value = state.species;
@@ -121,7 +128,7 @@
         load();
       });
       $('#species').addEventListener('change', (e) => { state.species = e.target.value; load(); });
-      load();
+      speciesReady.then(load);
     })();
   </script>
 </body>

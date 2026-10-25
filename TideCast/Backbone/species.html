@@ -60,7 +60,7 @@
         $('#count').textContent = `${list.length} of ${all.length} species`;
         $('#grid').innerHTML = list.map((s, i) => `
           <article class="card sp-card r-${s.rarity.toLowerCase()}" style="animation-delay:${Math.min(i, 15) * 0.025}s">
-            <div class="fish-art">${window.fishArt(s.name)}<span class="rarity rarity-${s.rarity.toLowerCase()}">${s.rarity}</span></div>
+            <div class="fish-art${s.image ? ' has-photo' : ''}">${window.fishPicture(s.name, s.image)}<span class="rarity rarity-${s.rarity.toLowerCase()}">${s.rarity}</span></div>
             <div class="sp-body">
               <span class="water-tag">${esc(s.water)}</span>
               <h3>${esc(s.name)}</h3>

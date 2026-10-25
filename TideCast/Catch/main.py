@@ -264,8 +264,22 @@ def leaderboard(query):
                  "week_start": db.week_start()}
 
 
+# Realistic species photos: Backbone/assets/species/<id>.webp|png|jpg (see the README there).
+SPECIES_IMAGES = os.path.join(os.path.dirname(HERE), "Backbone", "assets", "species")
+
+
+def species_image(species_id):
+    for ext in ("webp", "png", "jpg", "jpeg"):
+        if os.path.exists(os.path.join(SPECIES_IMAGES, f"{species_id}.{ext}")):
+            return f"/backbone/assets/species/{species_id}.{ext}"
+    return None
+
+
 def species(_query=None):
-    return 200, {"ok": True, "species": scoring.species_table(FISH_DB), "rules": scoring.rules()}
+    table = scoring.species_table(FISH_DB)
+    for s in table:
+        s["image"] = species_image(s["id"])
+    return 200, {"ok": True, "species": table, "rules": scoring.rules()}
 
 
 def stats(_query=None):

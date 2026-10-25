@@ -1,5 +1,6 @@
-// Species illustrations: a body shape, colours and markings per species (used wherever a catch
-// has no photo, and in the field guide). window.fishArt(name) returns an inline SVG.
+// Species pictures. window.fishPicture(name, image) shows the realistic photo from
+// assets/species/ (centred on black; a white studio background is removed automatically) and
+// falls back to an illustration (window.fishArt) for species that don't have a photo yet.
 (() => {
   const SHAPES = {
     bass: { d: 'M10 52C30 28 72 16 116 20C138 22 156 30 168 38L198 18C203 15 208 19 206 24L198 52L206 80C208 85 203 89 198 86L168 66C156 74 138 82 116 84C72 88 30 76 10 52Z', eye: [30, 46], fin: 'M64 24C80 6 112 4 132 18', gill: 'M48 34C56 44 56 60 48 70' },
@@ -94,4 +95,61 @@
     </svg>`;
   };
   window.FISH_SVG = window.fishArt('');
+
+  window.fishPicture = (name, image) => (image
+    ? `<img class="fish-photo" src="${image}" alt="${name}" loading="lazy" decoding="async">`
+    : window.fishArt(name));
+
+  // White (or near-white) studio backgrounds become transparent, so the fish sits on black.
+  const cutout = (img) => {
+    if (img.dataset.done) return;
+    img.dataset.done = '1';
+    const k = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0, w, h);
+    let d;
+    try { d = x.getImageData(0, 0, w, h); } catch { return; }
+    const p = d.data;
+    const light = (i) => 765 - (p[i] + p[i + 1] + p[i + 2]);   // 0 = pure white
+    const corners = [0, (w - 1) * 4, (h - 1) * w * 4, ((h - 1) * w + w - 1) * 4];
+    if (corners.some((i) => p[i + 3] < 250 || light(i) > 60)) {   // already transparent or not a light background
+      img.classList.add('ready');
+      return;
+    }
+    const seen = new Uint8Array(w * h);
+    const stack = [];
+    for (let i = 0; i < w; i++) stack.push(i, (h - 1) * w + i);
+    for (let j = 0; j < h; j++) stack.push(j * w, j * w + w - 1);
+    while (stack.length) {
+      const n = stack.pop();
+      if (seen[n]) continue;
+      const i = n * 4;
+      if (light(i) > 70) continue;
+      seen[n] = 1;
+      p[i + 3] = 0;
+      const cx = n % w, cy = (n / w) | 0;
+      if (cx > 0) stack.push(n - 1);
+      if (cx < w - 1) stack.push(n + 1);
+      if (cy > 0) stack.push(n - w);
+      if (cy < h - 1) stack.push(n + w);
+    }
+    // Soften the edge: pixels next to the removed background fade with their lightness.
+    for (let n = 0; n < w * h; n++) {
+      if (seen[n]) continue;
+      const cx = n % w;
+      if (!(seen[n - 1] && cx > 0) && !(seen[n + 1] && cx < w - 1) && !seen[n - w] && !seen[n + w]) continue;
+      const i = n * 4;
+      p[i + 3] = Math.min(255, Math.round((light(i) / 140) * 255));
+    }
+    x.putImageData(d, 0, 0);
+    img.src = c.toDataURL('image/png');
+    img.classList.add('ready');
+  };
+  document.addEventListener('load', (e) => {
+    if (e.target.classList?.contains('fish-photo')) cutout(e.target);
+  }, true);
 })();
