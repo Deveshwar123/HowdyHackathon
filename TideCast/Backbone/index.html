@@ -52,14 +52,14 @@
     <section id="program" class="after-section" aria-labelledby="program-title">
       <small class="kicker">HOW IT WORKS</small>
       <h2 id="program-title">From your nearest water to the leaderboard</h2>
-      <!-- Placeholder: swap this frame for the program video / walkthrough -->
-      <div class="program-frame" role="img" aria-label="Program walkthrough placeholder">
-        <span class="ph-tag">Placeholder</span>
-        <svg viewBox="0 0 24 24" width="54" height="54" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10 8l6 4-6 4z" fill="currentColor"/></svg>
-        <strong>Program walkthrough</strong>
-        <span>Video or interactive demo of the TideCast app goes here.</span>
-        <a class="cta small" href="catch.html">TRY IT NOW: LOG A CATCH →</a>
-      </div>
+      <!-- Program walkthrough video (assets/video/tidecast-walkthrough.mp4) -->
+      <figure class="program-frame">
+        <video controls playsinline preload="metadata" poster="assets/video/tidecast-walkthrough-poster.jpg" aria-label="TideCast program walkthrough">
+          <source src="assets/video/tidecast-walkthrough.mp4" type="video/mp4">
+          Your browser doesn’t support embedded video. <a href="assets/video/tidecast-walkthrough.mp4">Download the walkthrough</a>.
+        </video>
+      </figure>
+      <p class="program-cta"><a class="cta small" href="catch.html">TRY IT NOW: LOG A CATCH →</a></p>
       <ol class="steps">
         <li><b>Find water near you</b><span>Open <a href="/">Explore the waters</a> and tap <em>Spots near me</em>: the lakes, rivers and bays around you, and which fish to go for.</span></li>
         <li><b>Learn what’s biting</b><span>Every species recorded in that water (OBIS) and fishing activity from Global Fishing Watch, on a 3D globe.</span></li>
