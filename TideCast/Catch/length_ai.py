@@ -89,8 +89,24 @@ def _load_now():
         _load.update(state="ready")
         print(f"  Length model: ready on {p.utils.device} ({time.time() - _load['since']:.0f} s)", flush=True)
     except Exception as e:  # download blocked, bad pickle, out of memory...
-        _load.update(state="failed", error=f"{type(e).__name__}: {e}")
+        _load.update(state="failed", error=_explain(e))
         print("  Length model: FAILED to load - " + _load["error"], flush=True)
+
+
+def _explain(e):
+    """A load failure in words an angler can act on."""
+    text = f"{type(e).__name__}: {e}"
+    low = text.lower()
+    if "certificate_verify_failed" in low:
+        return ("couldn't download the image model: this Python can't verify secure websites. On a Mac, "
+                "open Applications > Python 3.x > Install Certificates.command, then restart TideCast")
+    if isinstance(e, MemoryError) or "out of memory" in low:
+        return "not enough memory: the model needs about 8 GB of free RAM"
+    if "urlopen error" in low or "connection" in low or "timed out" in low:
+        return "couldn't download the image model (about 4 GB): check the internet connection and restart TideCast"
+    if isinstance(e, (ImportError, ModuleNotFoundError)):
+        return f"a package is missing ({e}); click Install the length model again"
+    return text
 
 
 def warm_up():

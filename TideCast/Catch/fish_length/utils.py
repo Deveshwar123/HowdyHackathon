@@ -7,6 +7,29 @@ import torch
 import torchvision.transforms as T
 
 
+DINOV2_VITG14_URL = "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitg14/dinov2_vitg14_pretrain.pth"
+
+
+def _dinov2_vitg14():
+    """The same DINOv2 ViT-g/14 that torch.hub.load('facebookresearch/dinov2', 'dinov2_vitg14')
+    builds, from the copy in _vendor/ (torch.hub's latest code needs Python 3.10+). The weights
+    download once to torch's cache, ~/.cache/torch/hub/checkpoints."""
+    import sys
+    vendor = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_vendor")
+    if vendor not in sys.path:
+        sys.path.insert(0, vendor)
+    os.environ.setdefault("XFORMERS_DISABLED", "1")
+    from dinov2.models.vision_transformer import vit_giant2
+    model = vit_giant2(patch_size=14, img_size=518, init_values=1.0, ffn_layer="swiglufused", block_chunks=0,
+                       num_register_tokens=0, interpolate_antialias=False, interpolate_offset=0.1)
+    try:
+        state = torch.hub.load_state_dict_from_url(DINOV2_VITG14_URL, map_location="cpu", weights_only=True)
+    except TypeError:  # older torch without weights_only
+        state = torch.hub.load_state_dict_from_url(DINOV2_VITG14_URL, map_location="cpu")
+    model.load_state_dict(state, strict=True)
+    return model
+
+
 class Singleton(type):
     _instances = {}
     def __call__(cls, *args, **kwargs):
@@ -31,7 +54,7 @@ class FishLengthUtils(metaclass=Singleton):
         self.artifacts_dir = artifacts_dir
         os.makedirs(self.artifacts_dir, exist_ok=True)
         self.device = self._device_from_str(device)
-        self.model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitg14').to(self.device)
+        self.model = _dinov2_vitg14().to(self.device)
         self.model.eval()
 
         self.transform = T.Compose([
