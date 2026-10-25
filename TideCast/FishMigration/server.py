@@ -332,6 +332,7 @@ CATCH_ROUTES = {
     "/api/catch/analyze": catch.analyze,
     "/api/catch/measure": catch.measure_points,
     "/api/catch/submit": catch.submit,
+    "/api/catch/key": catch.set_key,
 }
 
 

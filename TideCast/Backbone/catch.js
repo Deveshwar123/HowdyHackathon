@@ -71,11 +71,30 @@
       SPECIES.map((s) => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
     if (S.species) el.species.value = S.species;
   });
-  api('/api/stats').then((d) => {
-    S.ai = !!d.ai;
+  const showAi = (on) => {
+    S.ai = on;
     el.aiPill.hidden = false;
     el.aiPill.classList.toggle('off', !S.ai);
-    el.aiPill.innerHTML = S.ai ? '<i></i>AI measuring is on' : '<i></i>Manual measuring · AI key not set on this server';
+    el.aiPill.innerHTML = S.ai ? '<i></i>AI measuring is on' : '<i></i>AI measuring is off · you can mark points by hand';
+    $('#keybox').hidden = S.ai;
+  };
+  api('/api/stats').then((d) => showAi(!!d.ai));
+
+  // Saving a Gemini key from the page (stored in TideCast/.env on the server's computer).
+  $('#keybox').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('#key-msg');
+    msg.className = 'small';
+    msg.textContent = 'Checking the key with Google…';
+    $('#key-save').disabled = true;
+    const d = await api('/api/catch/key', { key: $('#key').value.trim() }).catch(() => ({ ok: false, error: 'Couldn’t reach the server.' }));
+    $('#key-save').disabled = false;
+    msg.className = `small ${d.ok ? 'ok' : 'bad'}`;
+    msg.textContent = d.ok ? 'Key saved. Automatic measuring is on.' : d.error;
+    if (d.ok) {
+      $('#key').value = '';
+      setTimeout(() => showAi(true), 900);
+    }
   });
 
   // ---- Photo in ---------------------------------------------------------------
@@ -411,8 +430,12 @@
 
   // ---- Post -------------------------------------------------------------------
   el.post.addEventListener('click', async () => {
-    const angler = el.angler.value.trim() || (prompt('Your name for the leaderboard?') || '').trim();
-    if (!angler) return;
+    const angler = el.angler.value.trim();
+    if (!angler) {
+      banner('Add your name for the leaderboard.', true);
+      el.angler.focus();
+      return;
+    }
     el.angler.value = angler;
     store.set('tc-angler', angler);
     el.post.disabled = true;

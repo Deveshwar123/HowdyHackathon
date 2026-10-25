@@ -229,6 +229,27 @@ def submit(payload):
                  "rank_week": db.rank_of(new_id, "week"), "rank_all": db.rank_of(new_id, "all")}
 
 
+def set_key(payload):
+    """Saves a Gemini API key to TideCast/.env after checking it with Google (the server only
+    listens on 127.0.0.1, so this is reachable from this computer only)."""
+    key = str(payload.get("key") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{30,80}", key):
+        return _err(400, "That doesn't look like a Gemini API key (they start with AIza).")
+    ok, why = vision.check_key(key)
+    if not ok:
+        return _err(400, why)
+    env = os.path.join(os.path.dirname(HERE), ".env")
+    lines = []
+    if os.path.exists(env):
+        with open(env, encoding="utf-8") as f:
+            lines = [ln for ln in f.read().splitlines() if not re.match(r"\s*(export\s+)?GEMINI_API_KEY\s*=", ln)]
+    lines.append(f"GEMINI_API_KEY={key}")
+    with open(env, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.environ["GEMINI_API_KEY"] = key
+    return 200, {"ok": True, "ai": True}
+
+
 def leaderboard(query):
     period = "week" if (query.get("period") or ["all"])[0] == "week" else "all"
     species = (query.get("species") or [""])[0].strip() or None

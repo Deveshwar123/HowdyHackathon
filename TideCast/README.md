@@ -19,9 +19,11 @@ cd TideCast
 python3 FishMigration/server.py
 ```
 or double-click `start.command`. Python 3 only — nothing to install. It opens the home page.
+One server runs everything: `FishMigration/server.py`.
 
-**Turn on AI measuring (optional):** get a Gemini API key at https://aistudio.google.com/apikey and
-put it in `TideCast/.env`:
+**Turn on AI measuring:** get a free Gemini API key at https://aistudio.google.com/apikey, open
+*Log a catch* and paste it into **Turn on automatic measuring** (it's checked with Google and saved
+to `TideCast/.env`, which is never committed). Or create `TideCast/.env` yourself:
 
 ```
 GEMINI_API_KEY=your-key-here
@@ -29,6 +31,21 @@ GEMINI_API_KEY=your-key-here
 
 Without a key everything still works; on *Log a catch* anglers mark the snout, tail and knuckles
 with four taps instead. The terminal says which mode is on when the server starts.
+
+## Working on *Log a catch*
+
+| To change… | Edit |
+|---|---|
+| The page (layout, text) | `Backbone/catch.html` |
+| How the page behaves (upload, drawing the points, dragging, posting) | `Backbone/catch.js` |
+| How it looks | `Backbone/catch.css` (shared colours, buttons, header: `Backbone/site.css`) |
+| What the AI is asked and which models are used | `Catch/vision.py` |
+| The measuring math (knuckle scale → length → weight) | `Catch/measure.py`, `Catch/knuckle_data.py` |
+| Species and their length–weight constants | `Catch/fish_data.py` |
+| Points | `Catch/scoring.py` |
+| The API routes the page calls | `Catch/main.py` |
+
+Restart the server after editing a `.py` file; for the page files, just reload the browser.
 
 ## Folders
 

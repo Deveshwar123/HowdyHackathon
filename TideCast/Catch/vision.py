@@ -17,7 +17,8 @@ import urllib.request
 
 from fish_data import FISH_DB
 
-MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest"]
+# GEMINI_MODEL (comma-separated) overrides the models tried, in order.
+MODELS = [m.strip() for m in os.environ.get("GEMINI_MODEL", "gemini-flash-latest,gemini-flash-lite-latest").split(",") if m.strip()]
 RETRIES_PER_MODEL = 3
 REQUEST_TIMEOUT_S = 90
 MAX_IMAGE_SIDE = 1024
@@ -42,6 +43,20 @@ def _read_env_key():
 
 def api_key():
     return (os.environ.get("GEMINI_API_KEY") or _read_env_key()).strip()
+
+
+def check_key(key):
+    """(ok, message): asks Gemini whether the key works."""
+    req = urllib.request.Request(f"{API_URL}/models?pageSize=1", headers={"x-goog-api-key": key})
+    try:
+        with urllib.request.urlopen(req, timeout=20):
+            return True, ""
+    except urllib.error.HTTPError as e:
+        if e.code in (400, 401, 403):
+            return False, "Google rejected that key. Copy it again from aistudio.google.com/apikey."
+        return False, f"Google answered {e.code}. Try again in a moment."
+    except (urllib.error.URLError, TimeoutError) as e:
+        return False, f"Couldn't reach Google to check the key ({e})."
 
 
 class VisionUnavailable(Exception):
