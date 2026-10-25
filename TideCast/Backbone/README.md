@@ -24,7 +24,7 @@ water).
 - **Default location / offline waters:** `waters.js`.
 - **Spots near me** (pick a location, list nearby waters with fish and points) lives in the atlas
   (`../FishMigration/near-me.js`), not on this page.
-- **Rendering:** one WebGL canvas (three.js 0.169, vendored); the globe, lake surface and underwater
+- **Rendering:** one WebGL canvas (three.js 0.169, vendored); the globe and lake surface
   scenes render to separate layers that one compositor blends. The satellite image, its bounds and
   water mask are shared by the globe and the 3D lake.
 - **Server routes it uses** (`../FishMigration/server.py`): `/api/water`, `/api/water/shape`
