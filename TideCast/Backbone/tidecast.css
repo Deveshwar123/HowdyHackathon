@@ -12,7 +12,7 @@
 html { background: var(--navy); }
 body { margin: 0; color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; overscroll-behavior-y: none; }
 /* Scroll length of the journey; the stage stays pinned while it scrolls. */
-#track { height: 1100svh; }
+#track { height: 700svh; }
 #stage { position: fixed; inset: 0; width: 100vw; height: 100svh; display: block; z-index: 0; touch-action: pan-y; }
 #overlay { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
@@ -83,7 +83,7 @@ h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(54
 .rows .measure { font-family: var(--serif); font-size: 18px; }
 .rows .pts { font-weight: 700; font-size: 13px; color: #c4623a; min-width: 64px; text-align: right; }
 #board > footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
-#back { font-size: 14px; color: #24453d; padding: 10px 2px; }
+#back { font-size: 14px; color: #24453d; padding: 10px 2px; text-decoration: none; }
 #back:hover { color: #000; }
 
 
@@ -110,11 +110,6 @@ h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(54
 #chapters span { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px; color: #fff; text-shadow: 0 1px 8px rgba(0, 0, 0, .6); opacity: 0; transition: opacity .2s; }
 #chapters button:hover span, #chapters button:focus-visible span { opacity: 1; }
 
-/* "+points" when a fish is reeled out of the water */
-.catch-pop { position: absolute; left: 0; top: 0; opacity: 0; display: grid; justify-items: center; gap: 2px; padding: 8px 14px; border-radius: 14px; background: rgba(9, 22, 36, .62); border: 1px solid rgba(239, 145, 104, .55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); white-space: nowrap; box-shadow: 0 8px 26px rgba(0, 0, 0, .3); }
-.catch-pop b { font-family: var(--serif); font-weight: 500; font-size: 22px; color: var(--coral-hi); line-height: 1; }
-.catch-pop span { font-size: 11px; letter-spacing: .08em; color: #e6eef6; }
-
 body.in-water nav { padding: 8px 22px; border-radius: 999px; background: rgba(8, 26, 22, .38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 body.in-water .logo { padding: 6px 16px 6px 10px; border-radius: 999px; background: rgba(8, 26, 22, .3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 @media (max-width: 860px) { #chapters { display: none; } #scroll-hint { bottom: 14px; } }
@@ -130,22 +125,24 @@ body.in-water .logo { padding: 6px 16px 6px 10px; border-radius: 999px; backgrou
 }
 
 /* ---- After the journey: how it works, stats ------------------------------ */
-#after { position: relative; z-index: 9; padding: 12vh 0 10vh; background: linear-gradient(180deg, rgba(4, 18, 34, 0), rgba(4, 18, 34, .78) 18vh, rgba(4, 14, 26, .92)); }
+/* The lake stays visible behind "How it works"; the page darkens toward the stats. */
+#after { position: relative; z-index: 9; padding: 8vh 0 10vh; background: linear-gradient(180deg, rgba(4, 18, 34, 0), rgba(4, 18, 34, 0) 70vh, rgba(4, 18, 34, .6) 150vh, rgba(4, 14, 26, .9) 220vh); }
+.after-section h2 { text-shadow: 0 2px 24px rgba(0, 30, 50, .45); }
 .after-section { width: min(1100px, calc(100vw - 32px)); margin: 0 auto 14vh; }
 .kicker { font-size: 11px; letter-spacing: .26em; color: var(--coral-hi); }
 .after-section h2 { margin: 8px 0 28px; font-family: var(--serif); font-weight: 400; font-size: clamp(34px, 4.2vw, 62px); line-height: 1.02; letter-spacing: -.02em; }
 .ph-tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--coral-hi); border: 1px dashed rgba(239, 145, 104, .6); }
-.program-frame { position: relative; aspect-ratio: 16 / 9; display: grid; place-content: center; justify-items: center; gap: 10px; border-radius: 24px; border: 1.5px dashed rgba(255, 255, 255, .28); background: rgba(9, 22, 36, .55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: var(--ink-soft); text-align: center; padding: 20px; }
+.program-frame { position: relative; aspect-ratio: 16 / 9; display: grid; place-content: center; justify-items: center; gap: 10px; border-radius: 24px; border: 1.5px dashed rgba(255, 255, 255, .4); background: rgba(9, 30, 44, .42); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: var(--ink-soft); text-align: center; padding: 20px; }
 .program-frame .ph-tag { position: absolute; top: 16px; left: 16px; }
 .program-frame strong { font-family: var(--serif); font-weight: 400; font-size: 26px; color: var(--ink); }
 .program-frame > span:last-child { font-size: 14px; color: var(--muted); }
 .steps { list-style: none; counter-reset: s; margin: 28px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-.steps li { counter-increment: s; display: grid; gap: 6px; align-content: start; padding: 18px; border-radius: 18px; background: rgba(9, 22, 36, .6); border: 1px solid rgba(255, 255, 255, .1); }
+.steps li { counter-increment: s; display: grid; gap: 6px; align-content: start; padding: 18px; border-radius: 18px; background: rgba(9, 26, 40, .62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, .1); }
 .steps li::before { content: counter(s); font-family: var(--serif); font-size: 30px; line-height: 1; color: var(--coral); }
 .steps b { font-weight: 500; font-size: 16px; }
 .steps span { font-size: 13.5px; line-height: 1.5; color: var(--muted); }
 .steps a { color: var(--coral-hi); }
-.rules { margin-top: 16px; padding: 20px 22px; border-radius: 18px; background: rgba(239, 145, 104, .07); border: 1px solid rgba(239, 145, 104, .3); }
+.rules { margin-top: 16px; padding: 20px 22px; border-radius: 18px; background: rgba(9, 26, 40, .62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(239, 145, 104, .3); }
 .rules-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .rules h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 24px; }
 .rules ul { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 6px; color: var(--ink-soft); line-height: 1.5; }
@@ -161,7 +158,20 @@ body.in-water .logo { padding: 6px 16px 6px 10px; border-radius: 999px; backgrou
 .sources { margin: 22px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
 .sources a { color: var(--muted); }
 .after-foot { display: flex; align-items: center; gap: 20px; margin-top: 40px; flex-wrap: wrap; }
-#to-top, #board-how { font-size: 14px; color: var(--ink-soft); }
-#board-how { color: #24453d; }
+#to-top { font-size: 14px; color: var(--ink-soft); }
+.cta.ghost { background: rgba(255, 255, 255, .08); color: var(--ink); border: 1px solid rgba(255, 255, 255, .3); box-shadow: none; }
+a.teaser { color: inherit; text-decoration: none; }
+
+/* ---- Leaderboard page ---------------------------------------------------- */
+body.board-page { min-height: 100svh; background: radial-gradient(120% 80% at 85% 0%, rgba(239, 145, 104, .22), transparent 55%), radial-gradient(90% 70% at 10% 100%, rgba(40, 140, 170, .35), transparent 60%), linear-gradient(180deg, #0b1d2e, #06121e); }
+body.board-page main { width: min(860px, calc(100vw - 32px)); margin: 0 auto; padding: clamp(110px, 16vh, 150px) 0 60px; }
+body.board-page #board { position: relative; left: auto; top: auto; transform: none; visibility: visible; width: 100%; max-height: none; overflow: visible; background: linear-gradient(165deg, #f6fbfa, #e4f0ee); }
+.points-table { margin-top: 28px; padding: 22px 24px; border-radius: 22px; background: rgba(9, 26, 40, .6); border: 1px solid rgba(255, 255, 255, .12); }
+.points-table h2 { margin: 6px 0 14px; font-family: var(--serif); font-weight: 400; font-size: 30px; }
+.points-table ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 24px; }
+.points-table li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, .08); font-size: 14px; }
+.points-table li span { color: var(--muted); font-size: 12px; margin-left: 8px; }
+.points-table li b { color: var(--coral-hi); white-space: nowrap; }
+@media (max-width: 600px) { .points-table ul { grid-template-columns: 1fr; } }
 body.past-track #chapters button { border-color: rgba(255, 255, 255, .5); }
 @media (max-width: 960px) { .steps { grid-template-columns: repeat(2, 1fr); } .stat-grid { grid-template-columns: repeat(2, 1fr); } }

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tidecast — Leaderboard</title>
+  <meta name="description" content="The top TideCast anglers this week and of all time.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="tidecast.css">
+  <script src="leaderboard.js"></script>
+  <script src="fish-points.js"></script>
+</head>
+<body class="board-page">
+  <header class="top">
+    <a class="logo" href="./" aria-label="Tidecast home">
+      <svg viewBox="0 0 64 40" width="58" height="36" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#f7b28a"/><stop offset="1" stop-color="#e57a52"/></linearGradient></defs>
+        <path d="M3 11c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M3 21c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M3 31c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>
+      <span>TIDECAST</span>
+    </a>
+    <nav aria-label="Main">
+      <a href="../">Explore</a>
+      <a href="leaderboard.html" class="active" aria-current="page">Leaderboard</a>
+      <a href="./#program" id="nav-how">How it works</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="board" aria-labelledby="board-title">
+      <header>
+        <div><small>TIDECAST · ANGLERS</small><h2 id="board-title">Leaderboard</h2></div>
+        <div class="tabs" role="tablist">
+          <button role="tab" data-period="week" aria-selected="true">This week</button>
+          <button role="tab" data-period="all" aria-selected="false">All time</button>
+        </div>
+      </header>
+      <div class="podium" id="podium"></div>
+      <ol class="rows" id="rows"></ol>
+      <footer>
+        <a id="back" href="./">← Back to the globe</a>
+        <a class="cta small" href="../">EXPLORE THE WATERS →</a>
+      </footer>
+    </section>
+
+    <section class="points-table" aria-labelledby="points-title">
+      <small class="kicker">POINTS PER SPECIES</small>
+      <h2 id="points-title">What every catch is worth</h2>
+      <ul id="points"></ul>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const $ = (s) => document.querySelector(s);
+      const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const all = (window.TIDECAST_LEADERBOARD || []).slice().sort((a, b) => (b.points || 0) - (a.points || 0));
+      const initials = (n) => String(n || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+      const hue = (s) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+      function render(period) {
+        const rows = all.filter((r) => period === 'all' || (r.period || 'week') === 'week');
+        $('#podium').innerHTML = rows.slice(0, 3).map((r, i) => `
+          <article><div class="medal">${i + 1}</div><strong>${esc(r.angler)}</strong><span>${esc(r.species)} · ${esc(r.measure)}</span><span>${esc(r.location)}</span><em>${(r.points || 0).toLocaleString()} pts</em></article>`).join('');
+        $('#rows').innerHTML = rows.slice(3).map((r, i) => `
+          <li><span class="rank">${i + 4}</span><span class="avatar" style="background:hsl(${hue(r.angler)} 45% 42%)">${esc(initials(r.angler))}</span>
+            <span class="who"><strong>${esc(r.angler)}</strong><span>${esc(r.species)} · ${esc(r.location)}</span></span>
+            <span class="measure">${esc(r.measure)}</span><span class="pts">${(r.points || 0).toLocaleString()} pts</span></li>`).join('');
+        document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.period === period)));
+      }
+      document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => render(b.dataset.period)));
+      render('week');
+      $('#points').innerHTML = (window.TIDECAST_FISH || []).slice().sort((a, b) => b.points - a.points)
+        .map((f) => `<li><span class="name">${esc(f.name)}<span>${f.water === 'salt' ? 'saltwater' : 'freshwater'}</span></span><b>${f.points} pts</b></li>`).join('');
+    })();
+  </script>
+</body>
+</html>

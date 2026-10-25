@@ -32,7 +32,7 @@
     </a>
     <nav aria-label="Main">
       <a href="../" class="active">Explore</a>
-      <button id="nav-leaderboard" type="button">Leaderboard</button>
+      <a href="leaderboard.html">Leaderboard</a>
       <button id="nav-how" type="button">How it works</button>
     </nav>
   </header>
@@ -41,11 +41,11 @@
     <h1>Find your next<br>great catch.</h1>
     <p class="lede">Explore the waters. Learn what’s biting.<br>Make every catch count.</p>
     <a class="cta" href="../">EXPLORE THE WATERS <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-    <button class="teaser" id="teaser" type="button" aria-label="Go to the leaderboard">
+    <a class="teaser" id="teaser" href="leaderboard.html" aria-label="Go to the leaderboard">
       <span class="teaser-art" aria-hidden="true"></span>
       <span class="teaser-text"><small>THIS WEEK’S TOP CATCH</small><strong id="teaser-title">—</strong><span id="teaser-sub"></span></span>
-      <span class="teaser-go">Leaderboard ↓</span>
-    </button>
+      <span class="teaser-go">Leaderboard →</span>
+    </a>
   </main>
   <div id="scroll-hint" aria-hidden="true"><span>Scroll to dive in</span><i></i></div>
 
@@ -53,29 +53,11 @@
     <button data-to="0" aria-label="Earth"><span>Earth</span></button>
     <button data-to="0.18" aria-label="Your water"><span>Your water</span></button>
     <button data-to="0.38" aria-label="Descent"><span>Descent</span></button>
-    <button data-to="0.58" aria-label="Surface"><span>Surface</span></button>
-    <button data-to="0.8" aria-label="Beneath"><span>Beneath</span></button>
-    <button data-to="1" aria-label="Leaderboard"><span>Leaderboard</span></button>
+    <button data-to="0.62" aria-label="Your lake"><span>Your lake</span></button>
     <button data-section="program" aria-label="How it works"><span>How it works</span></button>
     <button data-section="stats" aria-label="By the numbers"><span>By the numbers</span></button>
   </nav>
 
-  <section id="board" aria-labelledby="board-title">
-    <header>
-      <div><small>TIDECAST · ANGLERS</small><h2 id="board-title">Leaderboard</h2></div>
-      <div class="tabs" role="tablist">
-        <button role="tab" data-period="week" aria-selected="true">This week</button>
-        <button role="tab" data-period="all" aria-selected="false">All time</button>
-      </div>
-    </header>
-    <div class="podium" id="podium"></div>
-    <ol class="rows" id="rows"></ol>
-    <footer>
-      <button id="back" type="button">↑ Back to the globe</button>
-      <button id="board-how" type="button">How do I get on the board? ↓</button>
-      <a class="cta small" href="../">EXPLORE THE WATERS →</a>
-    </footer>
-  </section>
 
   <!-- Scroll length of the journey -->
   <div id="track" aria-hidden="true"></div>
@@ -123,6 +105,7 @@
       <ul class="sources" id="stats-sources"></ul>
       <footer class="after-foot">
         <a class="cta small" href="../">EXPLORE THE WATERS →</a>
+        <a class="cta small ghost" href="leaderboard.html">SEE THE LEADERBOARD →</a>
         <button id="to-top" type="button">↑ Back to the globe</button>
       </footer>
     </section>

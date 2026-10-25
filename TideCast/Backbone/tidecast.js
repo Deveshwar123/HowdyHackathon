@@ -1,13 +1,11 @@
 // Tidecast — "Dive in".
 // One scroll-driven journey: Earth → your location (asked for on load; College Station until then)
 // pinging slowly while it finds the nearest water → a descent from orbit straight down onto that water
-// (satellite imagery carried from the globe into the live 3D lake) → through the surface → beneath it,
-// where a hook catches fish → the leaderboard rising through the water. After the journey the page
-// scrolls on normally into "How it works" and the stats. Every story element
-// is a pure function of scroll position, so the journey stops, reverses and scrubs exactly with the
-// scrollbar. Only ambient motion (globe spin, ping pulses, water, swimming fish, the hook) runs on its own.
+// (satellite imagery carried from the globe into the live 3D lake) → the lake's surface, which the
+// "How it works" and stats sections then scroll up over. Every story element of the journey is a pure
+// function of scroll position, so it stops, reverses and scrubs exactly with the scrollbar. Only
+// ambient motion (globe spin, ping pulses, water) runs on its own. The leaderboard has its own page.
 import * as THREE from 'three';
-import { GLTFLoader } from './vendor/addons/loaders/GLTFLoader.js';
 
 const $ = (s) => document.querySelector(s);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -30,10 +28,9 @@ const R = {
   signal: [0.05, 0.22],
   descent: [0.22, 0.465],
   surface: [0.465, 0.6],
-  plunge: [0.6, 0.66],
-  under: [0.64, 0.86],
-  board: [0.86, 1.0],
 };
+// The journey ends at p = END (the camera settles over the water).
+const END = 0.62;
 let pTarget = 0;
 let p = 0;
 const seg = ([a, b]) => clamp((p - a) / (b - a), 0, 1);
@@ -43,25 +40,22 @@ const track = document.getElementById('track');
 const maxScroll = () => Math.max(1, track.offsetTop + track.offsetHeight - innerHeight);
 let pastTrack = 0;
 const readScroll = () => {
-  pTarget = clamp(scrollY / maxScroll(), 0, 1);
+  pTarget = clamp(scrollY / maxScroll(), 0, 1) * END;
   pastTrack = Math.max(0, scrollY - maxScroll());
 };
 addEventListener('scroll', readScroll, { passive: true });
-const scrollToP = (f) => scrollTo({ top: f * maxScroll(), behavior: reduceMotion ? 'auto' : 'smooth' });
+const scrollToP = (f) => scrollTo({ top: (Math.min(f, END) / END) * maxScroll(), behavior: reduceMotion ? 'auto' : 'smooth' });
 
 // ===========================================================================
 // Where you are, and the water nearest you
 // ===========================================================================
 
-const FISH_INFO = Object.fromEntries((window.TIDECAST_FISH || []).map((f) => [f.id, f]));
-const DEFAULT_FISH = window.TIDECAST_DEFAULT_FISH || { fresh: [], salt: [] };
 const HOME = window.TIDECAST_HOME || { name: 'College Station, TX', lat: 30.628, lon: -96.334 };
 const kmBetween = (a, b) => {
   const p1 = a.lat * D2R, p2 = b.lat * D2R;
   const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(((b.lon - a.lon) * D2R) / 2) ** 2;
   return 12742 * Math.asin(Math.sqrt(h));
 };
-const fishFor = (w) => (w.fish && w.fish.length ? w.fish : DEFAULT_FISH[w.water || 'fresh'] || []).filter((id) => FISH_INFO[id]);
 const loc = { user: { ...HOME }, water: null, waters: [], km: 1 };
 
 // ===========================================================================
@@ -75,7 +69,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 const DPR = () => Math.min(window.devicePixelRatio || 1, isSmall() ? 1.5 : 2);
 const makeRT = (samples) => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples });
-const RT = { globe: makeRT(4), surface: makeRT(0), under: makeRT(4) };
+const RT = { globe: makeRT(4), surface: makeRT(0) };
 
 const loader = new THREE.TextureLoader();
 const prep = (t, srgb = true, wrap = false) => {
@@ -531,10 +525,10 @@ sScene.add(skyDome);
 const upG = new THREE.Vector3();
 function placeSurface(t) {
   const W = innerWidth, H = innerHeight;
-  const eS = easeInOut(seg([R.surface[0], R.plunge[1]]));
+  const eS = easeInOut(seg(R.surface));
   // Straight down the whole way, matching the globe's last frame (same altitude, lens and turn),
-  // until the lens meets the water.
-  const dist = p < R.surface[0] ? globeState.altKm * 1000 : Math.exp(lerp(Math.log(ALT_END_KM * 1000), Math.log(0.25), eS));
+  // settling just above the water.
+  const dist = p < R.surface[0] ? globeState.altKm * 1000 : Math.exp(lerp(Math.log(ALT_END_KM * 1000), Math.log(30), eS));
   const roll = 0.5;
   upG.set(Math.sin(roll), 0, -Math.cos(roll));            // the globe camera's "up" on the ground
   sCamera.position.set(0, dist, 0);
@@ -551,322 +545,9 @@ function placeSurface(t) {
   u.uShore.value = 1 - smooth(clamp((sCamera.position.y - 20) / 200, 0, 1));
   skyDome.position.copy(sCamera.position);
   // Ring sizes follow the camera height, so the drop reads the same at every altitude.
-  u.uRing.value = dist * 0.42 * (0.25 + seg([0.47, 0.63]));
+  u.uRing.value = dist * 0.42 * (0.25 + seg([0.47, 0.6]));
   u.uWave.value = Math.max(0.22, dist * 0.035);
-  u.uRingA.value = bell(0.47, 0.5, 0.55, 0.59);
-}
-
-// ===========================================================================
-// Layer 3 — beneath the surface: fish, and a hook that catches one now and then
-// ===========================================================================
-
-// Palette shared with the Earth hero: deep navy, ocean blue, and the warm coral sun.
-const DEEP = new THREE.Color().setRGB(0.018, 0.085, 0.16);      // linear
-const uScene = new THREE.Scene();
-const uCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 80);
-uScene.fog = new THREE.FogExp2(DEEP, 0.06);
-uScene.background = DEEP.clone();
-uScene.add(new THREE.HemisphereLight(0xbfe4ff, 0x0b2440, 2.4));
-const sunUnder = new THREE.DirectionalLight(0xffe0c4, 2.8);
-sunUnder.position.set(4, 10, 2);
-uScene.add(sunUnder);
-const rim = new THREE.DirectionalLight(0xff9a70, 0.9);
-rim.position.set(-3, 2, -6);
-uScene.add(rim);
-
-// Gradient water column behind everything, with the sun's warm glow high up.
-uScene.add(new THREE.Mesh(new THREE.SphereGeometry(60, 32, 16), new THREE.ShaderMaterial({
-  side: THREE.BackSide, depthWrite: false, fog: false,
-  vertexShader: `varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `varying vec3 vD; void main(){ float h = vD.y;
-    vec3 c = mix(vec3(0.004, 0.018, 0.045), vec3(0.018, 0.085, 0.16), smoothstep(-0.7, 0.0, h));
-    c = mix(c, vec3(0.1, 0.36, 0.6), smoothstep(0.0, 0.9, h));
-    c += vec3(1.0, 0.55, 0.32) * pow(max(dot(vD, normalize(vec3(0.5, 0.8, -0.3))), 0.0), 6.0) * 0.35;
-    gl_FragColor = vec4(c, 1.0);
-    #include <colorspace_fragment>
-  }`,
-})));
-
-// The surface seen from below, light dancing through it.
-const underSurfMat = new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-  uniforms: { uNormals: { value: waterNormals }, uTime: { value: 0 }, uCam: { value: new THREE.Vector3() } },
-  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-  fragmentShader: `uniform sampler2D uNormals; uniform float uTime; uniform vec3 uCam; varying vec3 vW;
-    void main(){
-      vec2 xz = vW.xz;
-      vec3 n = texture2D(uNormals, xz / 3.0 + uTime * vec2(0.02, 0.013)).rgb + texture2D(uNormals, xz / 1.3 - uTime * vec2(0.015, 0.02)).rgb;
-      float l = pow(clamp((n.r + n.g) * 0.5 - 0.35, 0.0, 1.0), 1.6);
-      vec3 V = normalize(vW - uCam);
-      float window = smoothstep(0.35, 0.85, V.y);          // Snell's window overhead
-      float sun = pow(max(dot(V, normalize(vec3(0.5, 0.8, -0.3))), 0.0), 18.0);
-      float d = length(vW - uCam);
-      vec3 c = mix(vec3(0.08, 0.3, 0.5), vec3(0.7, 0.9, 1.0), window) + l * 0.55 * (0.3 + window);
-      c += vec3(1.0, 0.7, 0.45) * sun * 0.9;
-      c = mix(vec3(0.018, 0.085, 0.16), c, exp(-d * 0.1));          // fade into the deep
-      gl_FragColor = vec4(c, 1.0);
-      #include <colorspace_fragment>
-    }`,
-});
-const underSurf = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), underSurfMat);
-underSurf.rotation.x = Math.PI / 2;
-uScene.add(underSurf);
-
-// Lake bed with moving caustics.
-const CAUSTIC = /* glsl */ `
-  vec2 cHash(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
-  float cWeb(vec2 p, float t) {
-    vec2 i = floor(p), f = fract(p);
-    float f1 = 8.0, f2 = 8.0;
-    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-      vec2 g = vec2(float(x), float(y));
-      vec2 o = 0.5 + 0.45 * sin(t * 0.7 + 6.2831 * cHash(i + g));
-      float d = length(g + o - f);
-      if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
-    }
-    return 1.0 - smoothstep(0.0, 0.32, f2 - f1);
-  }
-  float caustic(vec2 p, float t) {
-    vec2 w = p * 1.3 + vec2(sin(p.y * 1.1 + t * 0.35), cos(p.x * 0.9 - t * 0.3)) * 0.55;
-    float a = cWeb(w, t), b = cWeb(w * 1.7 + 3.7, t * 1.25);
-    return pow(a * b, 1.6) * 1.1 + pow(a, 4.0) * 0.25;   // light gathers where the two webs cross
-  }`;
-const bedMat = new THREE.ShaderMaterial({
-  fog: true,
-  uniforms: { ...THREE.UniformsLib.fog, uTime: { value: 0 } },
-  vertexShader: `varying vec3 vW; \n#include <fog_pars_vertex>\n
-    void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition; \n#include <fog_vertex>\n }`,
-  fragmentShader: `uniform float uTime; varying vec3 vW; ${NOISE} ${CAUSTIC} \n#include <fog_pars_fragment>\n
-    void main(){
-      float n = fbm(vec3(vW.xz * 0.35, 0.0));
-      vec3 c = mix(vec3(0.07, 0.09, 0.1), vec3(0.3, 0.27, 0.2), n);
-      c += caustic(vW.xz * 0.8, uTime) * vec3(0.6, 0.85, 1.0) * 0.42;
-      gl_FragColor = vec4(c, 1.0);
-      \n#include <fog_fragment>\n
-      \n#include <colorspace_fragment>\n
-    }`,
-});
-const bed = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), bedMat);
-bed.rotation.x = -Math.PI / 2;
-bed.position.y = -5.5;
-uScene.add(bed);
-
-// Shafts of sunlight from the surface, warm at the top like the sunlit edge of the Earth.
-const rayMat = new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
-  uniforms: { uTime: { value: 0 } },
-  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform float uTime; varying vec2 vUv;
-    void main(){ float edge = pow(sin(vUv.x * 3.14159), 3.0); float fall = pow(vUv.y, 2.2);
-      float flick = 0.7 + 0.3 * sin(uTime * 0.6 + vUv.x * 4.0 + vUv.y * 2.0);
-      vec3 c = mix(vec3(0.5, 0.78, 1.0), vec3(1.0, 0.8, 0.6), smoothstep(0.6, 1.0, vUv.y));
-      gl_FragColor = vec4(c * edge * fall * flick * 0.09, 1.0);
-      #include <colorspace_fragment>
-    }`,
-});
-const rays = [];
-for (let i = 0; i < 6; i++) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(2.4 + Math.random() * 2.5, 11), rayMat);
-  m.position.set(-8 + i * 3.2 + Math.random(), -5.2, -6 - Math.random() * 7);
-  m.rotation.z = -0.32 + Math.random() * 0.06;
-  m.userData.sway = Math.random() * 6;
-  rays.push(m);
-  uScene.add(m);
-}
-
-// Suspended particles (marine snow).
-const SNOW = isSmall() ? 500 : 1100;
-const snowGeo = new THREE.BufferGeometry();
-const snowPos = new Float32Array(SNOW * 3);
-for (let i = 0; i < SNOW; i++) {
-  snowPos[i * 3] = (Math.random() - 0.5) * 26;
-  snowPos[i * 3 + 1] = -Math.random() * 5.5;
-  snowPos[i * 3 + 2] = -18 + Math.random() * 26;
-}
-snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
-const snowMat = new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, fog: false,
-  uniforms: { uTime: { value: 0 }, uPx: { value: 1 } },
-  vertexShader: `uniform float uTime, uPx; varying float vA;
-    void main(){ vec3 p = position; p.x += sin(uTime * 0.21 + position.z) * 0.25; p.y += mod(uTime * 0.03 + position.x * 0.1, 1.0) * 0.4;
-      vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_PointSize = uPx * 22.0 / -mv.z; vA = exp(mv.z * 0.09); gl_Position = projectionMatrix * mv; }`,
-  fragmentShader: `varying float vA; void main(){ float d = length(gl_PointCoord - 0.5); gl_FragColor = vec4(vec3(0.82, 0.92, 1.0), smoothstep(0.5, 0.0, d) * 0.45 * vA); }`,
-});
-uScene.add(new THREE.Points(snowGeo, snowMat));
-
-// Fish: a photoscanned barramundi (CC0, Khronos glTF samples), swimming via a vertex bend.
-const FISH = Array.from({ length: isSmall() ? 9 : 14 }, (_, i) => (i < 3
-  ? [{ c: [-0.7, -1.45, -0.5], a: 2.1, b: 1.1, w: 0.16, ph: 0.0, s: 1.9 },
-    { c: [-1.8, -2.1, -3.6], a: 3.0, b: 1.8, w: -0.13, ph: 2.1, s: 1.7 },
-    { c: [2.0, -1.0, -5.2], a: 2.6, b: 1.5, w: 0.15, ph: 4.0, s: 1.6 }][i]
-  : { c: [-6 + (i % 6) * 2.4, -1.2 - (i % 3) * 0.8, -7 - Math.floor(i / 6) * 3.5], a: 2 + (i % 4), b: 1.2 + (i % 3) * 0.5,
-    w: (i % 2 ? 1 : -1) * (0.12 + (i % 5) * 0.02), ph: i * 1.3, s: 1.2 + (i % 4) * 0.2 }));
-const fishPath = (f, t, out) => {
-  const a = f.w * t + f.ph;
-  out.set(f.c[0] + f.a * Math.cos(a), f.c[1] + 0.25 * Math.sin(2 * a + f.ph), f.c[2] + f.b * Math.sin(a));
-  return out;
-};
-const fishObjs = [];
-let fishLen = 0.5;
-
-function makeFish(base, len, s, phase) {
-  const mat = base.material.clone();
-  mat.envMapIntensity = 0;
-  mat.roughness = 0.5;
-  mat.color.multiplyScalar(1.3);
-  const uni = { uTime: { value: 0 }, uPhase: { value: phase }, uLen: { value: len }, uFreq: { value: 7 }, uWag: { value: 1 } };
-  mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, uni);
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime, uPhase, uLen, uFreq, uWag; varying vec3 vCW;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-        float s = clamp(transformed.z / uLen + 0.5, 0.0, 1.0);      // 0 = head (-z), 1 = tail (+z)
-        float tail = pow(s, 1.7);
-        transformed.x += sin(uTime * uFreq + s * 5.0 + uPhase) * uLen * (0.025 + 0.11 * tail) * uWag;`)
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvCW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uTime; varying vec3 vCW;\n${CAUSTIC}`)
-      .replace('#include <opaque_fragment>', `outgoingLight += diffuseColor.rgb * caustic(vCW.xz * 1.4, uTime) * vec3(0.6, 0.85, 1.0) * 0.55;\n#include <opaque_fragment>`);
-  };
-  const mesh = new THREE.Mesh(base.geometry, mat);
-  mesh.rotation.y = Math.PI;      // the model's head points to -z; face the direction of travel (+z)
-  const holder = new THREE.Group();
-  holder.add(mesh);
-  holder.scale.setScalar(s);
-  uScene.add(holder);
-  return { holder, mesh, uni };
-}
-
-// The hook: a steel J-hook with a coral soft-plastic bait on a line from the surface.
-const hook = new THREE.Group();
-{
-  const steel = new THREE.MeshStandardMaterial({ color: 0xdfe6ee, metalness: 0.55, roughness: 0.28, emissive: 0x1b2633 });
-  const shape = new THREE.CatmullRomCurve3([
-    [0, 0.12], [0, 0.07], [0, 0.03], [0.006, 0.006], [0.025, -0.002], [0.044, 0.008], [0.05, 0.03], [0.048, 0.05],
-  ].map(([x, y]) => new THREE.Vector3(x - 0.025, y, 0)));
-  hook.add(new THREE.Mesh(new THREE.TubeGeometry(shape, 48, 0.0032, 8), steel));
-  const eye = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.0025, 8, 20), steel);
-  eye.position.set(-0.025, 0.128, 0);
-  eye.rotation.y = Math.PI / 2;
-  hook.add(eye);
-  const barb = new THREE.Mesh(new THREE.ConeGeometry(0.005, 0.016, 8), steel);
-  barb.position.set(0.0215, 0.05, 0);
-  barb.rotation.z = 0.5;
-  hook.add(barb);
-  const bait = new THREE.Mesh(new THREE.CapsuleGeometry(0.009, 0.05, 6, 12),
-    new THREE.MeshStandardMaterial({ color: 0xef9168, emissive: 0x6a2410, roughness: 0.45 }));
-  bait.position.set(-0.025, 0.07, 0);
-  hook.add(bait);
-}
-const lineMat = new THREE.MeshBasicMaterial({ color: 0xe8f4ff, transparent: true, opacity: 0.55, fog: false });
-const line = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 6, 1, true), lineMat);
-uScene.add(hook, line);
-let biter = null;
-const catchPop = document.createElement('div');
-catchPop.className = 'catch-pop';
-overlay.appendChild(catchPop);
-
-new GLTFLoader().load('assets/fish/fish.json', (gltf) => {
-  let base = null;
-  gltf.scene.traverse((o) => { if (o.isMesh && !base) base = o; });
-  if (!base) return;
-  base.geometry.computeBoundingBox();
-  const bb = base.geometry.boundingBox;
-  base.geometry.translate(0, -(bb.min.y + bb.max.y) / 2, -(bb.min.z + bb.max.z) / 2);
-  const len = bb.max.z - bb.min.z;
-  for (const f of FISH) fishObjs.push({ f, ...makeFish(base, len, f.s, f.ph * 3), pos: new THREE.Vector3(), next: new THREE.Vector3() });
-  biter = makeFish(base, len, 1.7, 1.0);
-  biter.half = (len / 2) * 1.7 * 0.92;
-  fishLen = len * 1.7;
-  hook.scale.setScalar((fishLen * 0.28) / 0.13);
-});
-
-// One catch every CATCH_T seconds (ambient): the hook drops, a fish takes it, and it's reeled out.
-const CATCH_T = 18;
-const hookAt = new THREE.Vector3(), mouth = new THREE.Vector3(), headDir = new THREE.Vector3(), tmpA = new THREE.Vector3();
-const bez = (a, b, c, t, out) => out.copy(a).multiplyScalar((1 - t) * (1 - t)).addScaledVector(b, 2 * (1 - t) * t).addScaledVector(c, t * t);
-const S0 = new THREE.Vector3(), C0 = new THREE.Vector3();
-function placeHook(t, W, H, showPop) {
-  const k = ((t % CATCH_T) + CATCH_T) % CATCH_T;
-  const halfW = Math.tan(27.5 * D2R) * 5 * uCamera.aspect;
-  const home = new THREE.Vector3(Math.min(3.4, halfW * 0.72), -1.7, -1.6);
-  // Hook height through the cycle.
-  let y = home.y + 0.03 * Math.sin(t * 1.7);
-  if (k < 2.5) y = lerp(0.4, home.y, easeOut(k / 2.5));
-  else if (k > 7.5 && k < 8.1) y += 0.05 * Math.sin((k - 7.5) * 30);
-  else if (k >= 8.1) y = lerp(home.y, 0.9, Math.pow(clamp((k - 8.1) / 3.2, 0, 1), 1.6));
-  const sway = k >= 8.1 ? Math.sin(t * 9) * 0.06 * clamp((k - 8.1) * 2, 0, 1) : Math.sin(t * 0.8) * 0.02;
-  hookAt.set(home.x + sway, y, home.z);
-  hook.position.copy(hookAt);
-  hook.rotation.set(0, -0.6 + Math.sin(t * 0.7) * 0.25, sway * 2);
-  hook.visible = k < 11.6;
-  // The line, from the hook's eye up through the surface.
-  const top = hookAt.y + fishLen * 0.27;
-  line.position.set(hookAt.x, (top + 1.2) / 2, hookAt.z);
-  line.scale.set(0.0035, 1.2 - top, 0.0035);
-  line.visible = hook.visible && top < 1.2;
-  if (!biter) return;
-  // The fish: swims in, bites, is reeled out head-first, thrashing.
-  biter.holder.visible = k > 2.5 && k < 11.6;
-  biter.uni.uTime.value = t;
-  biter.uni.uFreq.value = k >= 7.5 ? 17 : 7;
-  biter.uni.uWag.value = k >= 7.5 ? 1.7 : 1;
-  mouth.copy(hookAt);
-  if (k < 7.5) {
-    S0.set(home.x - 3.4, home.y - 0.5, home.z - 3.6);
-    C0.set(home.x - 0.4, home.y - 0.6, home.z - 2.4);
-    const u = easeInOut(clamp((k - 2.5) / 5, 0, 1));
-    bez(S0, C0, hookAt, u, tmpA);
-    bez(S0, C0, hookAt, Math.min(1, u + 0.02), headDir);
-    headDir.sub(tmpA).normalize();
-    if (u > 0.98) headDir.set(0.35, 0.15, 0.93).normalize();
-    biter.holder.position.copy(tmpA).addScaledVector(headDir, -biter.half);
-  } else {
-    headDir.set(Math.sin(t * 8) * 0.35, k < 8.1 ? 0.2 : 1, k < 8.1 ? 0.95 : 0.25).normalize();
-    biter.holder.position.copy(mouth).addScaledVector(headDir, -biter.half);
-  }
-  biter.holder.lookAt(tmpA.copy(biter.holder.position).add(headDir));
-  // "+points" as the catch breaks the surface.
-  const list = fishFor(loc.water || {});
-  const fish = FISH_INFO[list[Math.floor(t / CATCH_T) % Math.max(1, list.length)]];
-  const pop = showPop && fish ? clamp((k - 9.6) / 0.4, 0, 1) * (1 - clamp((k - 12.6) / 0.6, 0, 1)) : 0;
-  if (pop > 0) {
-    tmpA.set(hookAt.x, 0, hookAt.z).project(uCamera);
-    const x = (tmpA.x * 0.5 + 0.5) * W, yy = (-tmpA.y * 0.5 + 0.5) * H;
-    catchPop.innerHTML = `<b>+${fish.points} pts</b><span>${fish.name}</span>`;
-    catchPop.style.transform = `translate(${x.toFixed(1)}px, ${Math.max(70, yy - 10 - 26 * pop).toFixed(1)}px) translate(-50%, -100%)`;
-  }
-  catchPop.style.opacity = pop.toFixed(3);
-}
-
-const lookFwd = new THREE.Vector3(), lookDown = new THREE.Vector3();
-function placeUnder(t, plunge) {
-  const W = innerWidth, H = innerHeight;
-  const eU = easeInOut(seg(R.under));
-  const eUp = easeInOut(seg([R.plunge[0] + 0.02, R.under[0] + 0.1]));   // from looking down to looking ahead
-  const sway = Math.sin(t * 0.4) * 0.05;
-  uCamera.position.set(sway, lerp(-0.25, -1.25, eU), lerp(5.2, 3.4, eU));
-  lookFwd.set(sway * 2, lerp(-0.9, -1.55, eU), -4).sub(uCamera.position).normalize();
-  lookDown.set(0, -1, -0.0001);
-  lookDown.lerp(lookFwd, eUp).normalize();
-  uCamera.up.set(0, eUp, -(1 - eUp)).normalize();          // no roll, so the horizon comes up level
-  uCamera.lookAt(lookDown.add(uCamera.position));
-  uCamera.updateProjectionMatrix();
-  underSurfMat.uniforms.uTime.value = t;
-  underSurfMat.uniforms.uCam.value.copy(uCamera.position);
-  bedMat.uniforms.uTime.value = t;
-  rayMat.uniforms.uTime.value = t;
-  snowMat.uniforms.uTime.value = t;
-  snowMat.uniforms.uPx.value = RT.under.height / 900;
-  for (const r of rays) r.position.x += Math.sin(t * 0.3 + r.userData.sway) * 0.0015;
-  for (const o of fishObjs) {
-    fishPath(o.f, t, o.pos);
-    fishPath(o.f, t + 0.05, o.next);
-    o.holder.position.copy(o.pos);
-    o.holder.lookAt(o.next);
-    o.uni.uTime.value = t;
-  }
-  placeHook(t, W, H, plunge >= 1 && p < R.board[0]);
+  u.uRingA.value = seg([0.47, 0.5]);
 }
 
 // ===========================================================================
@@ -875,15 +556,15 @@ function placeUnder(t, plunge) {
 
 const compMat = new THREE.ShaderMaterial({
   uniforms: {
-    tGlobe: { value: RT.globe.texture }, tSurface: { value: RT.surface.texture }, tUnder: { value: RT.under.texture },
+    tGlobe: { value: RT.globe.texture }, tSurface: { value: RT.surface.texture },
     tStars: { value: tex('assets/stars.jpg') },
-    wSurface: { value: 0 }, uPlunge: { value: 0 },
+    wSurface: { value: 0 },
     uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uSkyDay: { value: 0 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tGlobe, tSurface, tUnder, tStars;
-    uniform float wSurface, uPlunge, uTime, uSkyDay;
+    uniform sampler2D tGlobe, tSurface, tStars;
+    uniform float wSurface, uTime, uSkyDay;
     uniform vec2 uRes;
     varying vec2 vUv;
     vec3 sky(vec2 uv) {
@@ -899,18 +580,6 @@ const compMat = new THREE.ShaderMaterial({
       vec3 col = g.rgb + sky(uv) * (1.0 - clamp(g.a, 0.0, 1.0));
       if (wSurface > 0.0) col = mix(col, texture2D(tSurface, uv).rgb, wSurface);
 
-      // Through the surface: the water closes over the lens from the centre outward.
-      if (uPlunge > 0.0) {
-        vec2 c = (uv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
-        float a = atan(c.y, c.x);
-        float R = uPlunge * uPlunge * 1.25;
-        float r = length(c) + (0.02 * sin(a * 7.0 + uTime * 2.0) + 0.012 * sin(a * 13.0 - uTime * 3.0)) * min(1.0, R * 6.0);
-        if (r < R) {
-          vec2 uu = uv + c * 0.05 * (1.0 - uPlunge) * sin(r * 40.0 - uTime * 4.0);
-          col = texture2D(tUnder, uu).rgb;
-        }
-        col += exp(-pow((r - R) * uRes.y / 5.0, 2.0)) * vec3(0.85, 0.96, 1.0) * 0.7 * smoothstep(0.0, 0.06, R) * (1.0 - smoothstep(0.85, 1.0, uPlunge));
-      }
       float v = smoothstep(1.25, 0.35, length((uv - 0.5) * vec2(uRes.x / uRes.y, 1.0)));
       col *= mix(0.82, 1.0, v);
       gl_FragColor = vec4(col, 1.0);
@@ -1063,53 +732,33 @@ function askLocation() {
 }
 
 // ===========================================================================
-// DOM: hero, leaderboard
+// DOM: hero, chapters
 // ===========================================================================
 
 const hero = $('#hero');
 const hint = $('#scroll-hint');
-const board = $('#board');
 const chapterBtns = [...document.querySelectorAll('#chapters button')];
 
 function placeDom() {
   document.body.classList.toggle('past-track', pastTrack > innerHeight * 0.5);
-  const H = innerHeight;
   const hOut = seg(R.heroOut);
   hero.style.opacity = (1 - hOut).toFixed(3);
   hero.style.transform = `translateY(${(-60 * hOut).toFixed(1)}px)`;
   hero.style.visibility = hOut >= 1 ? 'hidden' : 'visible';
   hint.style.opacity = (1 - seg([0, 0.02])).toFixed(3);
-  // Leaderboard: rises up through the water and settles in front of the fish at the end.
-  const eB = seg(R.board);
-  board.style.visibility = eB > 0 ? 'visible' : 'hidden';
-  // ...and scrolls away with the page into the sections after the journey.
-  board.style.transform = `translate(-50%, calc(-46% + ${((1 - easeOut(eB)) * 1.15 * H - pastTrack).toFixed(1)}px))`;
-  board.inert = eB < 0.98;
   document.body.classList.toggle('in-water', p > 0.5);
-  const at = (b) => (b.dataset.section ? 1 + (document.getElementById(b.dataset.section).getBoundingClientRect().top + scrollY - maxScroll()) / innerHeight : +b.dataset.to);
+  const at = (b) => (b.dataset.section ? END + (document.getElementById(b.dataset.section).getBoundingClientRect().top + scrollY - maxScroll()) / innerHeight : +b.dataset.to);
   const here = p + pastTrack / innerHeight;
   const nearest = chapterBtns.reduce((best, b) => (Math.abs(at(b) - here) < Math.abs(at(best) - here) ? b : best), chapterBtns[0]);
   chapterBtns.forEach((b) => b.classList.toggle('on', b === nearest));
 }
 
-const allRows = () => (window.TIDECAST_LEADERBOARD || []).slice().sort((a, b) => (b.points || 0) - (a.points || 0));
-const rowsFor = (period) => allRows().filter((r) => period === 'all' || (r.period || 'week') === 'week');
-const initials = (n) => String(n || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
-const hue = (s) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
-function renderBoard(period = 'week') {
-  const rows = rowsFor(period);
-  $('#podium').innerHTML = rows.slice(0, 3).map((r, i) => `
-    <article><div class="medal">${i + 1}</div><strong>${esc(r.angler)}</strong><span>${esc(r.species)} · ${esc(r.measure)}</span><span>${esc(r.location)}</span><em>${(r.points || 0).toLocaleString()} pts</em></article>`).join('');
-  $('#rows').innerHTML = rows.slice(3).map((r, i) => `
-    <li><span class="rank">${i + 4}</span><span class="avatar" style="background:hsl(${hue(r.angler)} 45% 42%)">${esc(initials(r.angler))}</span>
-      <span class="who"><strong>${esc(r.angler)}</strong><span>${esc(r.species)} · ${esc(r.location)}</span></span>
-      <span class="measure">${esc(r.measure)}</span><span class="pts">${(r.points || 0).toLocaleString()} pts</span></li>`).join('');
-  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.period === period)));
-  const top = rowsFor('week')[0];
-  if (top) {
-    $('#teaser-title').textContent = `${top.species}, ${top.measure}`;
-    $('#teaser-sub').textContent = `${top.angler} · ${top.location}`;
-  }
+// Hero teaser: this week's top catch (the full board is leaderboard.html).
+function renderTeaser() {
+  const top = (window.TIDECAST_LEADERBOARD || []).filter((r) => (r.period || 'week') === 'week').sort((a, b) => (b.points || 0) - (a.points || 0))[0];
+  if (!top) return;
+  $('#teaser-title').textContent = `${top.species}, ${top.measure}`;
+  $('#teaser-sub').textContent = `${top.angler} · ${top.location}`;
 }
 
 // ===========================================================================
@@ -1159,7 +808,7 @@ function resize() {
   renderer.setPixelRatio(dpr);
   renderer.setSize(W, H, false);
   for (const rt of Object.values(RT)) rt.setSize(Math.round(W * dpr), Math.round(H * dpr));
-  for (const c of [gCamera, sCamera, uCamera]) c.aspect = W / H;
+  for (const c of [gCamera, sCamera]) c.aspect = W / H;
   compMat.uniforms.uRes.value.set(W * dpr, H * dpr);
   readScroll();
 }
@@ -1175,10 +824,8 @@ function frame(now) {
   if (Math.abs(pTarget - p) < 1e-5) p = pTarget;
 
   const wSurface = seg([0.455, 0.47]);
-  const plunge = easeInOut(seg(R.plunge));
   const globeOn = wSurface < 1;
-  const underOn = plunge > 0;
-  const surfaceOn = wSurface > 0 && plunge < 1;
+  const surfaceOn = wSurface > 0;
 
   if (globeOn) {
     placeGlobe(dt, clock);
@@ -1194,17 +841,9 @@ function frame(now) {
     renderer.setRenderTarget(RT.surface);
     renderer.render(sScene, sCamera);
   }
-  if (underOn) {
-    placeUnder(clock, plunge);
-    renderer.setRenderTarget(RT.under);
-    renderer.render(uScene, uCamera);
-  } else {
-    catchPop.style.opacity = '0';
-  }
 
   const cu = compMat.uniforms;
   cu.wSurface.value = wSurface;
-  cu.uPlunge.value = plunge;
   cu.uSkyDay.value = seg([0.3, 0.45]);
   cu.uTime.value = clock;
   renderer.setRenderTarget(null);
@@ -1220,18 +859,12 @@ function frame(now) {
 
 const toSection = (id) => document.getElementById(id).scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
 addEventListener('resize', resize);
-$('#nav-leaderboard').onclick = () => scrollToP(1);
-$('#teaser').onclick = () => scrollToP(1);
-$('#back').onclick = () => scrollToP(0);
 $('#to-top').onclick = () => scrollToP(0);
 chapterBtns.forEach((b) => (b.onclick = () => (b.dataset.section ? toSection(b.dataset.section) : scrollToP(+b.dataset.to))));
-document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => renderBoard(b.dataset.period)));
 $('#nav-how').onclick = () => toSection('program');
-$('#board-how').onclick = () => toSection('program');
 
-renderBoard('week');
+renderTeaser();
 resize();
-if (location.hash === '#leaderboard') requestAnimationFrame(() => scrollTo(0, maxScroll()));
 renderStats();
 p = pTarget;
 // Start at College Station (or wherever TIDECAST_HOME says) and ask where the visitor really is.
