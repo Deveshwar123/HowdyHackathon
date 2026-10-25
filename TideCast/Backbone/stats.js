@@ -16,11 +16,13 @@ window.TIDECAST_STATS = {
     { live: 'species', label: 'species landed' },
     { live: 'total_lb', decimals: 0, suffix: ' lb', label: 'of fish weighed, no scale' },
   ],
+  // The length model's own test results (Catch/fish_length/artifacts/metrics.json, written by
+  // training) come from /api/stats; until the model is installed these show "—".
   model: [
-    { value: null, decimals: 1, suffix: '%', label: 'species identification accuracy', note: 'Top-1, on held-out catch photos', placeholder: true },
-    { live: 'species_known', label: 'species it can measure', note: 'Each with its own length–weight curve' },
-    { value: 2, label: 'knuckle spans per photo', note: 'Index–pinky and middle–pinky; the median wins' },
-    { live: 'avg_err_pct', prefix: '±', suffix: '%', label: 'average weight range', note: 'Length error plus natural plumpness spread' },
+    { live: 'model_mae_cm', prefix: '±', decimals: 1, suffix: ' cm', label: 'average length error', note: 'Learned model (DINOv2 + AutoML) on held-out photos', modelStat: true },
+    { live: 'model_r2_pct', decimals: 0, suffix: '%', label: 'of length variation explained (R²)', note: 'Same held-out test photos', modelStat: true },
+    { live: 'model_n_test', label: 'test photos it has never seen', note: 'Scored after training', modelStat: true },
+    { live: 'species_known', label: 'species it can score', note: 'Each with its own length–weight curve' },
   ],
   sources: [
     { name: 'RBFF / Outdoor Foundation, 2025 Special Report on Fishing (2024 data)', url: 'https://www.nmma.org/press/article/25183' },

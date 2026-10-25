@@ -60,10 +60,6 @@ def estimate(species_name, fish_spine, references, img_w, img_h,
     if not info:
         raise ValueError(f"Species not in database: {species_name}")
 
-    a = info["a"]
-    b = info["b"]
-    max_len = info.get("max_length_cm", math.inf)
-
     fish_px = polyline_length_px(fish_spine, img_w, img_h)
 
     # One length estimate per usable reference.
@@ -94,14 +90,29 @@ def estimate(species_name, fish_spine, references, img_w, img_h,
     else:
         spread = 0.0
 
+    length_err = math.sqrt(LENGTH_ERROR_FRAC ** 2 + (spread / 2) ** 2)
+    extra = []
+    if len(length_estimates) > 1 and spread > 0.25:
+        extra.append("The knuckle references disagreed a lot - treat the weight as rough.")
+    out = from_length(key, length_cm, length_err, extra)
+    out["num_references"] = len(length_estimates)
+    out["method"] = "knuckles"
+    return out
+
+
+def from_length(species_name, length_cm, length_err_frac=LENGTH_ERROR_FRAC, extra_warnings=()):
+    """Weight, range, warnings and species facts for a fish of this length (shared by the
+    knuckle measurement and the learned model, so both are scored the same way)."""
+    key, info = find_fish(species_name)
+    if not info:
+        raise ValueError(f"Species not in database: {species_name}")
+    a, b = info["a"], info["b"]
+    max_len = info.get("max_length_cm", math.inf)
+
     weight_g = a * (length_cm ** b)
     weight_lb = weight_g / GRAMS_PER_POUND
     weight_kg = weight_g / 1000.0
-
-    length_err = math.sqrt(LENGTH_ERROR_FRAC ** 2 + (spread / 2) ** 2)
-    weight_err_frac = math.sqrt(
-        (b * length_err) ** 2 + CONDITION_ERROR_FRAC ** 2
-    )
+    weight_err_frac = math.sqrt((b * length_err_frac) ** 2 + CONDITION_ERROR_FRAC ** 2)
     low_lb = weight_lb * (1 - weight_err_frac)
     high_lb = weight_lb * (1 + weight_err_frac)
 
@@ -117,10 +128,7 @@ def estimate(species_name, fish_spine, references, img_w, img_h,
             f"Measured length {length_cm:.0f} cm is well above the typical "
             f"max ({hi} cm) - double-check the grip and points."
         )
-    if len(length_estimates) > 1 and spread > 0.25:
-        warnings.append(
-            "The knuckle references disagreed a lot - treat the weight as rough."
-        )
+    warnings.extend(extra_warnings)
 
     return {
         "species": key,
@@ -137,6 +145,5 @@ def estimate(species_name, fish_spine, references, img_w, img_h,
         "weight_low_lb": round(max(low_lb, 0), 2),
         "weight_high_lb": round(high_lb, 2),
         "error_frac": round(weight_err_frac, 3),
-        "num_references": len(length_estimates),
         "warnings": warnings,
     }

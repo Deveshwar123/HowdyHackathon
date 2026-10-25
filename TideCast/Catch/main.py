@@ -21,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import db           # noqa: E402
+import length_ai    # noqa: E402
 import measure      # noqa: E402
 import scoring      # noqa: E402
 import vision       # noqa: E402
@@ -39,6 +40,7 @@ PHOTO_ID = re.compile(r"^[0-9a-f]{64}$")
 
 
 def init():
+    length_ai.warm_up()
     db.init_db()
     os.makedirs(PHOTOS, exist_ok=True)
     _seed_samples()
@@ -109,10 +111,15 @@ def _knuckle(payload):
     return v or None
 
 
-def _measure(payload, w, h):
-    key, info = measure.find_fish(payload.get("species", ""))
-    if not info:
-        raise LookupError("Species not recognized in our database.")
+def _learned_length(photo_id):
+    """The learned model's length for this photo (cached), or None when it isn't installed."""
+    try:
+        return length_ai.predict_length_cm(_photo_path(photo_id), key=photo_id)
+    except Exception:  # the model is optional; never let it break a catch
+        return None
+
+
+def _knuckle_result(key, payload, w, h):
     spine = [_point(p) for p in payload.get("spine") or []]
     if len(spine) < 2:
         raise ValueError("Mark the fish from snout to tail.")
@@ -120,7 +127,32 @@ def _measure(payload, w, h):
     if not refs:
         raise ValueError("Mark your knuckles so we have a scale.")
     sex = "female" if payload.get("sex") == "female" else "male"
-    result = measure.estimate(key, spine, refs, w, h, own_knuckle_cm=_knuckle(payload), sex=sex)
+    return measure.estimate(key, spine, refs, w, h, own_knuckle_cm=_knuckle(payload), sex=sex)
+
+
+def _measure(payload, w, h):
+    """One measurement, used for what the angler sees AND what gets posted, so the points always
+    match: the learned model's length when it's installed, else the knuckle measurement."""
+    key, info = measure.find_fish(payload.get("species", ""))
+    if not info:
+        raise LookupError("Species not recognized in our database.")
+    learned = _learned_length(payload.get("photo"))
+    if learned:
+        knuckles = None
+        try:
+            knuckles = _knuckle_result(key, payload, w, h)
+        except ValueError:
+            pass  # no usable knuckle marks: the model doesn't need them
+        length = min(learned, info.get("max_length_cm") or learned)
+        m = length_ai.metrics() or {}
+        err = (m["mae"] / max(length, 1)) if m.get("mae") else measure.LENGTH_ERROR_FRAC
+        result = measure.from_length(key, length, err)
+        result["method"] = "model"
+        result["model_length_cm"] = round(learned, 1)
+        if knuckles:
+            result["knuckle_length_cm"] = knuckles["length_cm"]
+    else:
+        result = _knuckle_result(key, payload, w, h)
     pts = scoring.score(info, result["length_cm"], result["weight_lb"])
     result["points"] = pts["total"]
     result["points_breakdown"] = pts
@@ -178,7 +210,7 @@ def analyze(payload):
               "k3": [data["knuckle3_left"], data["knuckle3_right"]]}
     if not data.get("fish_detected"):
         return _err(400, "No fish detected. Retake the photo.", analysis=analysis)
-    if not data.get("hand_detected"):
+    if not data.get("hand_detected") and not _learned_length(payload.get("photo")):
         return _err(400, "Knuckles not visible. Retake so your knuckles face the camera, "
                          "or mark them yourself.", analysis=analysis, points=points, manual=True)
     key, info = measure.find_fish(data.get("species", "Unknown"))
@@ -282,9 +314,19 @@ def species(_query=None):
     return 200, {"ok": True, "species": table, "rules": scoring.rules()}
 
 
+def model_info():
+    """What the home page and the catch page say about the length model."""
+    st = length_ai.status()
+    m = length_ai.metrics() or {}
+    return {"available": st["available"], "reason": st["reason"], "ready": length_ai.ready(),
+            "r2": m.get("r2"), "mae_cm": m.get("mae"), "n_test": m.get("n_test"),
+            "n_train": m.get("n_train"), "mean_length_cm": m.get("mean_length")}
+
+
 def stats(_query=None):
     s = db.stats()
-    return 200, {"ok": True, **s, "species_known": len(FISH_DB), "ai": bool(vision.api_key())}
+    return 200, {"ok": True, **s, "species_known": len(FISH_DB), "ai": bool(vision.api_key()),
+                 "model": model_info()}
 
 
 def photo_bytes(name):

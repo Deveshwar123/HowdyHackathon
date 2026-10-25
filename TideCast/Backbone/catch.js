@@ -78,7 +78,7 @@
     el.aiPill.innerHTML = S.ai ? '<i></i>AI measuring is on' : '<i></i>AI measuring is off · you can mark points by hand';
     $('#keybox').hidden = S.ai;
   };
-  api('/api/stats').then((d) => showAi(!!d.ai));
+  api('/api/stats').then((d) => { S.model = !!(d.model && d.model.available); showAi(!!d.ai); });
 
   // Saving a Gemini key from the page (stored in TideCast/.env on the server's computer).
   $('#keybox').addEventListener('submit', async (e) => {
@@ -376,7 +376,10 @@
     el.dot.style.left = `${(r.weight_lb / top) * 100}%`;
     el.dot.style.opacity = '1';
     const conf = analysis && typeof analysis.confidence === 'number' ? ` · AI confidence ${Math.round(analysis.confidence * 100)}%` : '';
-    el.rangeNote.textContent = `±${Math.round(r.error_frac * 100)}% · measured against ${r.num_references} knuckle span${r.num_references > 1 ? 's' : ''}${conf}`;
+    const how = r.method === 'model'
+      ? `measured by the TideCast length model${r.knuckle_length_cm ? ` (your knuckles say ${(r.knuckle_length_cm / 2.54).toFixed(1)} in)` : ''}`
+      : `measured against ${r.num_references} knuckle span${r.num_references > 1 ? 's' : ''}`;
+    el.rangeNote.textContent = `±${Math.round(r.error_frac * 100)}% · ${how}${conf}`;
     animateNumber(el.pts, r.points, 0);
     const b = r.points_breakdown || {};
     el.brk.innerHTML = `<li>${esc(r.rarity)} species <b>${b.base}</b></li><li>${r.weight_lb.toFixed(1)} lb × 10 <b>${b.weight}</b></li>${b.trophy ? `<li>Trophy size <b>+${b.trophy}</b></li>` : ''}`;
@@ -386,7 +389,8 @@
 
   let measureTimer = 0, measureSeq = 0;
   function remeasure(now) {
-    if (!S.photo || !S.spine.length || !S.k4 || !S.species || S.mode === 'posted') return;
+    // The length model measures from the photo alone; the knuckle method needs the marks.
+    if (!S.photo || !S.species || S.mode === 'posted' || (!S.model && (!S.spine.length || !S.k4))) return;
     clearTimeout(measureTimer);
     measureTimer = setTimeout(async () => {
       const seq = ++measureSeq;

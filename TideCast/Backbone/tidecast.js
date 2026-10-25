@@ -852,7 +852,14 @@ async function renderStats() {
     const d = await (await fetch('/api/stats')).json();
     const real = d.catches > 0;
     const src = real ? d : { ...d, ...(d.including_samples || {}) };
-    live = { ...src, species_known: d.species_known, avg_err_pct: d.avg_err == null ? null : Math.round(d.avg_err * 100) };
+    const m = d.model || {};
+    live = {
+      ...src, species_known: d.species_known, avg_err_pct: d.avg_err == null ? null : Math.round(d.avg_err * 100),
+      model_mae_cm: m.mae_cm ?? null, model_r2_pct: m.r2 == null ? null : Math.max(0, m.r2 * 100), model_n_test: m.n_test ?? null,
+    };
+    live.modelNote = m.mae_cm != null ? null
+      : m.available ? 'Model installed; retrain it to record its test scores'
+      : 'Shows once the trained length model is added';
     if (!real && d.sample_rows) live.note = `Includes ${d.sample_rows} demo catches until real ones are posted`;
   } catch { /* offline */ }
   for (const group of [S.impact || [], S.model || []]) {
@@ -860,6 +867,7 @@ async function renderStats() {
       if (!x.live) continue;
       x.value = live[x.live] ?? null;
       if (group === S.impact && live.note && !x.note) x.note = live.note;
+      if (x.modelStat && x.value == null && live.modelNote) x.note = live.modelNote;
     }
   }
   const card = (x) => `<article class="stat${x.placeholder ? ' placeholder' : ''}">

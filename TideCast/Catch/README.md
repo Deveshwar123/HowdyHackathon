@@ -20,3 +20,17 @@ deleted after two days. `fish.db`, `photos/` and `.env` are not committed.
 
 Settings: `GEMINI_API_KEY` (or `TideCast/.env`), `TIDECAST_DB` (database path), `TIDECAST_SAMPLES=0`,
 `GEMINI_URL` (testing). `MOCK_MODE` in `vision.py` returns fixed points without calling Gemini.
+
+## Learned length model (optional)
+
+`fish_length/` is a DINOv2 + AutoML model that predicts a fish's length straight from the photo.
+When it's installed, every catch is measured and scored from the model's length (the knuckle marks
+become a cross-check), and the home page's "The model" numbers come from its test results.
+
+1. `pip3 install -r TideCast/Catch/requirements-model.txt`
+2. Put the trained files in `TideCast/Catch/fish_length/artifacts/`: `automl_model.pkl`,
+   `features_scaler_model.pkl`, `length_scaler_model.pkl` and `metrics.json` (training writes
+   all four: `cd TideCast/Catch && python3 -m fish_length.cli_trainer data.csv --artifacts fish_length/artifacts`).
+3. Restart the server. The first start downloads DINOv2 (a few GB) once.
+
+Without it, the catch app measures from the angler's knuckles exactly as before.

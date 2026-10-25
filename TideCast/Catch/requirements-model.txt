@@ -1,0 +1,11 @@
+# Optional: the learned fish-length model (fish_length/). The rest of TideCast needs nothing.
+#   pip3 install -r TideCast/Catch/requirements-model.txt
+# Put the trained files in TideCast/Catch/fish_length/artifacts/ (see length_ai.py).
+torch
+torchvision
+numpy
+pillow
+scikit-learn
+pandas
+flaml[automl]
+xgboost
