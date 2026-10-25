@@ -4,8 +4,13 @@ For each species: remove the white / checkerboard background, keep only the fish
 outline, and save a transparent WebP to Backbone/assets/species/<id>.webp (shown on black).
 
     python3 TideCast/fish-photos/make_species.py        # needs Pillow, numpy, scipy
+
+Any other species is picked up from a file named after its id (e.g. `bowfin.jpg`), which is
+what fetch_photos.py saves.
 """
+import glob
 import os
+import sys
 
 import numpy as np
 from PIL import Image
@@ -48,6 +53,7 @@ PHOTOS = {
     "muskellunge": "northern pike.png",
     # Huge silver scales, upturned mouth = tarpon.
     "tarpon": "Atlantic Croaker.png",
+    "wahoo": "Wahoo.png",
 }
 
 
@@ -113,16 +119,35 @@ def process(src, dst):
     Image.fromarray(out, "RGBA").save(dst, "WEBP", quality=90, method=6)
 
 
-def main():
+def species_ids():
+    sys.path.insert(0, os.path.join(HERE, "..", "Catch"))
+    from fish_data import FISH_DB
+    from scoring import slug
+    return [slug(name) for name in FISH_DB]
+
+
+def photo_for(sid):
+    if sid in PHOTOS:
+        return os.path.join(HERE, PHOTOS[sid])
+    for path in sorted(glob.glob(os.path.join(HERE, sid + ".*"))):
+        if path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+            return path
+    return None
+
+
+def main(only=None):
     os.makedirs(OUT, exist_ok=True)
-    for sid, name in PHOTOS.items():
-        src = os.path.join(HERE, name)
-        if not os.path.exists(src):
-            print("missing", name)
+    for sid in only or species_ids():
+        src = photo_for(sid)
+        if not src or not os.path.exists(src):
+            print("no photo", sid)
             continue
-        process(src, os.path.join(OUT, sid + ".webp"))
-        print("ok", sid, "<-", name)
+        try:
+            process(src, os.path.join(OUT, sid + ".webp"))
+            print("ok", sid, "<-", os.path.basename(src))
+        except Exception as e:  # one bad photo shouldn't stop the rest
+            print("failed", sid, e)
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:] or None)

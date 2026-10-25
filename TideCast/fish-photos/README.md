@@ -44,7 +44,24 @@ to replace the drawn fish on the species guide and leaderboard.
 
 `python3 TideCast/fish-photos/make_species.py` (needs Pillow, numpy, scipy) cuts each fish out,
 adds the white outline and writes `Backbone/assets/species/<id>.webp`. The `PHOTOS` table at the
-top of the script says which photo is used for which species.
+top of the script says which uploaded photo is used for which species; any other species uses a
+file named after its id (e.g. `bowfin.jpg`).
 
-Still drawn (no matching photo yet): `king-mackerel`, `redfish`, `alligator-gar`.
-Uploaded but not used: `Goldfish.png`, `Wahoo.png`, `Muskellunge.png`, `Brown Trout.png`.
+## Finding pictures automatically
+
+```bash
+pip3 install pillow numpy scipy certifi
+python3 TideCast/fish-photos/fetch_photos.py
+```
+
+For every species without a picture it searches online, keeps only side-on fish on a white
+background that are free to reuse, saves the pick here as `<id>.jpg` (credited in `CREDITS.md`)
+and makes the cut-out. To redo one: `python3 TideCast/fish-photos/fetch_photos.py bowfin`.
+
+- **Google Images:** add `GOOGLE_API_KEY=...` and `GOOGLE_CSE_ID=...` to `TideCast/.env`
+  (a Programmable Search Engine with image search on, plus the Custom Search API enabled).
+- **Without those** it uses Wikimedia Commons, preferring public-domain U.S. Fish & Wildlife and
+  NOAA illustrations.
+
+Check the Species page afterwards; if a picture is wrong, replace `<id>.*` here with your own and
+run `make_species.py`.

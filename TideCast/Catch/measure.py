@@ -14,9 +14,10 @@ CONDITION_ERROR_FRAC = 0.12
 
 LOOKUP = {}
 for _name, _info in FISH_DB.items():
-    LOOKUP[_name.lower()] = _name
     for _alias in _info.get("aliases", []):
-        LOOKUP[_alias.lower()] = _name
+        LOOKUP.setdefault(_alias.lower(), _name)
+for _name in FISH_DB:                      # a real species name always wins over an alias
+    LOOKUP[_name.lower()] = _name
 
 
 def find_fish(name):
