@@ -636,6 +636,9 @@ if __name__ == "__main__":
     print(f"  OBIS records per species query: {MAX_RECORDS:,}")
     print("  Catch measuring (Gemini): " + ("on" if catch.vision.api_key() else
           "off - set GEMINI_API_KEY (or put it in TideCast/.env); anglers can still mark points by hand"))
+    model = catch.length_ai.status()
+    print("  Length model (automatic measuring): " + ("on" if model["available"] else
+          "off - " + model["reason"] + "; anglers mark their knuckles instead (see Catch/README.md)"))
     print("  Global Fishing Watch: checking the API token with GFW…")
     threading.Thread(target=check_token, daemon=True).start()
     if not os.environ.get("NO_BROWSER"):

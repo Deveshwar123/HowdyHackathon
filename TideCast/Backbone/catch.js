@@ -74,11 +74,19 @@
   const showAi = (on) => {
     S.ai = on;
     el.aiPill.hidden = false;
-    el.aiPill.classList.toggle('off', !S.ai);
-    el.aiPill.innerHTML = S.ai ? '<i></i>AI measuring is on' : '<i></i>AI measuring is off · you can mark points by hand';
+    // Fully automatic needs the length model (measures) + Gemini (names the species).
+    el.aiPill.innerHTML = S.model && S.ai ? '<i></i>Automatic measuring is on'
+      : S.model ? '<i></i>Length model on · pick the species yourself (no Gemini key)'
+      : S.ai ? `<i></i>AI is on · length model off, so mark your knuckles${S.modelWhy ? ` (${esc(S.modelWhy)})` : ''}`
+      : '<i></i>AI measuring is off · you can mark points by hand';
+    el.aiPill.classList.toggle('off', !S.model);
     $('#keybox').hidden = S.ai;
   };
-  api('/api/stats').then((d) => { S.model = !!(d.model && d.model.available); showAi(!!d.ai); });
+  api('/api/stats').then((d) => {
+    S.model = !!(d.model && d.model.available);
+    S.modelWhy = (d.model && d.model.reason) || '';
+    showAi(!!d.ai);
+  });
 
   // Saving a Gemini key from the page (stored in TideCast/.env on the server's computer).
   $('#keybox').addEventListener('submit', async (e) => {
@@ -145,7 +153,11 @@
     if (!up.ok) return showSetupError(up.error);
     S.photo = up.photo;
     if (S.ai) analyze();
-    else startManual('Mark the fish and your knuckles: four taps.');
+    else if (S.model) {
+      // The length model measures from the photo; only the species is needed.
+      showResult(null, null, S.species ? '' : 'Choose the species and the length model measures it from the photo.');
+      if (S.species) remeasure(true);
+    } else startManual('Mark the fish and your knuckles: four taps.');
   }
 
   async function analyze() {
@@ -173,6 +185,17 @@
       }
       setPoints(d.points);
       showResult(null, d.analysis, d.error);
+      if (S.species) remeasure(true);
+      return;
+    }
+    if (d.manual && S.model) {
+      // No AI for the species/points, but the length model measures from the photo alone:
+      // the angler only picks the species, no knuckle marks needed.
+      if (d.analysis && d.analysis.species && d.analysis.species !== 'Unknown') {
+        const known = SPECIES.find((s) => s.name.toLowerCase() === d.analysis.species.toLowerCase());
+        if (known) S.species = known.name;
+      }
+      showResult(null, d.analysis, S.species ? '' : 'Choose the species and the length model measures it from the photo.');
       if (S.species) remeasure(true);
       return;
     }
@@ -380,6 +403,8 @@
       ? `measured by the TideCast length model${r.knuckle_length_cm ? ` (your knuckles say ${(r.knuckle_length_cm / 2.54).toFixed(1)} in)` : ''}`
       : `measured against ${r.num_references} knuckle span${r.num_references > 1 ? 's' : ''}`;
     el.rangeNote.textContent = `±${Math.round(r.error_frac * 100)}% · ${how}${conf}`;
+    // Knuckle sizes only matter when the knuckles are the ruler.
+    $('#hand').closest('.field').hidden = r.method === 'model';
     animateNumber(el.pts, r.points, 0);
     const b = r.points_breakdown || {};
     el.brk.innerHTML = `<li>${esc(r.rarity)} species <b>${b.base}</b></li><li>${r.weight_lb.toFixed(1)} lb × 10 <b>${b.weight}</b></li>${b.trophy ? `<li>Trophy size <b>+${b.trophy}</b></li>` : ''}`;
