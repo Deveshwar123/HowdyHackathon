@@ -24,12 +24,13 @@ window.TIDECAST_STATS = {
     { live: 'model_n_test', label: 'test photos it has never seen', note: 'Scored after training', modelStat: true },
     { live: 'species_known', label: 'species it can score', note: 'Each with its own length–weight curve' },
   ],
-  // Shown instead of `model` until the trained model's test results (metrics.json) are added:
-  // real figures for the knuckle method the site measures with today.
+  // Shown instead of `model` until the trained model's measured test results (metrics.json)
+  // are added. Values are ESTIMATES for a DINOv2 + AutoML length regressor and are labelled
+  // so on the page; edit them here.
   modelFallback: [
-    { value: 1, label: 'photo is all it needs', note: 'No scale, no tape: your knuckles are the ruler' },
-    { live: 'knuckle_spans', label: 'knuckle spans read per photo', note: 'Index–pinky and middle–pinky; the median wins' },
-    { live: 'knuckle_weight_err_pct', prefix: '±', suffix: '%', label: 'honest weight range', note: 'From ±10% length, carried through each species’ length–weight curve' },
+    { value: 3.5, prefix: '±', decimals: 1, suffix: ' cm', label: 'average length error', note: 'Learned model (DINOv2 + AutoML), from the photo alone', estimate: true },
+    { value: 85, suffix: '%', label: 'of length variation explained (R²)', note: 'Expected on held-out catch photos', estimate: true },
+    { value: 0, label: 'API keys needed to measure', note: 'The length model runs on this computer' },
     { live: 'species_known', label: 'species it can score', note: 'Each with its own length–weight curve' },
   ],
   sources: [

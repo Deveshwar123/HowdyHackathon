@@ -873,7 +873,7 @@ async function renderStats() {
   const card = (x) => `<article class="stat${x.placeholder ? ' placeholder' : ''}">
       <strong data-value="${x.value ?? ''}" data-prefix="${esc(x.prefix || '')}" data-suffix="${esc(x.suffix || '')}" data-decimals="${x.decimals || 0}">${x.value == null ? '—' : esc(x.prefix || '') + '0' + esc(x.suffix || '')}</strong>
       <span>${esc(x.label)}</span>${x.note ? `<small>${esc(x.note)}</small>` : ''}
-      ${x.placeholder ? '<em>Placeholder</em>' : ''}</article>`;
+      ${x.placeholder ? '<em>Placeholder</em>' : ''}${x.estimate ? '<em class="est">Estimate</em>' : ''}</article>`;
   for (const [id, list] of [['stats-market', S.market], ['stats-impact', S.impact], ['stats-model', S.model]]) {
     const el = document.getElementById(id);
     if (el) el.innerHTML = (list || []).map(card).join('');

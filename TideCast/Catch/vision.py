@@ -46,18 +46,38 @@ def api_key():
     return (os.environ.get("GEMINI_API_KEY") or _read_env_key()).strip()
 
 
+def auth_options(key):
+    """Headers to try for a key. Classic AI Studio keys ("AIza...") go in x-goog-api-key; the
+    newer AI Studio key format ("AQ....") is tried that way and as a bearer token."""
+    first = {"x-goog-api-key": key}
+    if key.startswith("AIza"):
+        return [first]
+    return [first, {"Authorization": "Bearer " + key}]
+
+
+_auth_cache = {}
+
+
+def _auth(key):
+    return _auth_cache.get(key) or auth_options(key)[0]
+
+
 def check_key(key):
-    """(ok, message): asks Gemini whether the key works."""
-    req = urllib.request.Request(f"{API_URL}/models?pageSize=1", headers={"x-goog-api-key": key})
-    try:
-        with urllib.request.urlopen(req, timeout=20):
-            return True, ""
-    except urllib.error.HTTPError as e:
-        if e.code in (400, 401, 403):
-            return False, "Google rejected that key. Copy it again from aistudio.google.com/apikey."
-        return False, f"Google answered {e.code}. Try again in a moment."
-    except (urllib.error.URLError, TimeoutError) as e:
-        return False, f"Couldn't reach Google to check the key ({e})."
+    """(ok, message): asks Gemini whether the key works (and remembers how to send it)."""
+    last = None
+    for headers in auth_options(key):
+        req = urllib.request.Request(f"{API_URL}/models?pageSize=1", headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=20):
+                _auth_cache[key] = headers
+                return True, ""
+        except urllib.error.HTTPError as e:
+            last = e.code
+            if e.code not in (400, 401, 403):
+                return False, f"Google answered {e.code}. Try again in a moment."
+        except (urllib.error.URLError, TimeoutError) as e:
+            return False, f"Couldn't reach Google to check the key ({e})."
+    return False, f"Google rejected that key ({last}). Copy it again from aistudio.google.com/apikey."
 
 
 class VisionUnavailable(Exception):
@@ -111,6 +131,8 @@ def call_gemini(jpeg_bytes):
     key = api_key()
     if not key:
         raise VisionUnavailable("no_key")
+    if key not in _auth_cache and not key.startswith("AIza"):
+        check_key(key)                     # learn which way this key format is sent
     body = json.dumps({
         "contents": [{"parts": [
             {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(jpeg_bytes).decode()}},
@@ -122,7 +144,7 @@ def call_gemini(jpeg_bytes):
     for model in MODELS:
         for attempt in range(RETRIES_PER_MODEL):
             req = urllib.request.Request(f"{API_URL}/models/{model}:generateContent", data=body, method="POST",
-                                         headers={"Content-Type": "application/json", "x-goog-api-key": key})
+                                         headers={"Content-Type": "application/json", **_auth(key)})
             try:
                 with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_S) as r:
                     resp = json.loads(r.read())

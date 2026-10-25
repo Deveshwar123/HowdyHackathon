@@ -265,8 +265,9 @@ def set_key(payload):
     """Saves a Gemini API key to TideCast/.env after checking it with Google (the server only
     listens on 127.0.0.1, so this is reachable from this computer only)."""
     key = str(payload.get("key") or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_\-]{30,80}", key):
-        return _err(400, "That doesn't look like a Gemini API key (they start with AIza).")
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]{30,400}", key):
+        return _err(400, "That doesn't look like a Gemini API key (from aistudio.google.com/apikey; "
+                         "they start with AIza or AQ.).")
     ok, why = vision.check_key(key)
     if not ok:
         return _err(400, why)
