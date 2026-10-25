@@ -84,11 +84,33 @@
   };
   api('/api/stats').then((d) => {
     S.model = !!(d.model && d.model.available);
+    S.modelReady = !!(d.model && d.model.ready);
     S.modelWhy = (d.model && d.model.reason) || '';
     showAi(!!d.ai);
     // The length model comes first: offer to install it before the knuckle / API-key options.
     if (!S.model && store.get('tc-model-skip') !== '1') askModel();
   });
+
+  // ---- Waiting for the length model to load (the first time it downloads ~4 GB) ----
+  let gateTimer = 0;
+  async function modelGate() {
+    clearTimeout(gateTimer);
+    const d = await fetch('/api/catch/model').then((r) => r.json()).catch(() => null);
+    const m = (d && d.model) || {};
+    S.modelReady = !!m.ready;
+    if (m.ready) {
+      if (el.banner.textContent.startsWith('Loading the length model')) banner(S.species ? '' : 'Choose the species and the length model measures it from the photo.');
+      if (S.species) remeasure(true);
+      return;
+    }
+    if (m.load === 'failed' || !m.available) {
+      S.model = false;
+      showAi(S.ai);
+      return startManual(`The length model couldn’t start (${m.load_error || m.reason || 'unknown error'}). Mark the fish and your knuckles instead: four taps.`);
+    }
+    banner('Loading the length model… the first time it downloads about 4 GB, so this can take a few minutes.');
+    gateTimer = setTimeout(modelGate, 3000);
+  }
 
   // ---- "Install the length model?" --------------------------------------------------
   const ask = { box: $('#model-ask'), status: $('#model-status'), install: $('#model-install'), skip: $('#model-skip') };
@@ -205,7 +227,7 @@
     else if (S.model) {
       // The length model measures from the photo; only the species is needed.
       showResult(null, null, S.species ? '' : 'Choose the species and the length model measures it from the photo.');
-      if (S.species) remeasure(true);
+      modelGate();
     } else startManual('Mark the fish and your knuckles: four taps.');
   }
 
@@ -245,7 +267,7 @@
         if (known) S.species = known.name;
       }
       showResult(null, d.analysis, S.species ? '' : 'Choose the species and the length model measures it from the photo.');
-      if (S.species) remeasure(true);
+      modelGate();
       return;
     }
     if (d.manual) return startManual(d.error);
@@ -464,7 +486,7 @@
   let measureTimer = 0, measureSeq = 0;
   function remeasure(now) {
     // The length model measures from the photo alone; the knuckle method needs the marks.
-    if (!S.photo || !S.species || S.mode === 'posted' || (!S.model && (!S.spine.length || !S.k4))) return;
+    if (!S.photo || !S.species || S.mode === 'posted' || (!(S.model && S.modelReady) && (!S.spine.length || !S.k4))) return;
     clearTimeout(measureTimer);
     measureTimer = setTimeout(async () => {
       const seq = ++measureSeq;
@@ -486,7 +508,8 @@
     S.species = el.species.value;
     el.species.classList.remove('need');
     banner('');
-    remeasure(true);
+    if (S.model && !S.modelReady && !(S.spine.length && S.k4)) modelGate();
+    else remeasure(true);
   });
 
   // ---- Where it was caught ------------------------------------------------------------

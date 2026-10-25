@@ -68,46 +68,59 @@ def info():
 
 _lock = threading.Lock()
 _predictor = None
-_failed = None
 _cache = {}
+# idle -> loading -> ready | failed. Loading the first time downloads DINOv2 (~4 GB).
+_load = {"state": "idle", "error": "", "since": 0.0}
 
 
-def _get_predictor():
-    global _predictor, _failed
-    with _lock:
-        if _predictor is None and _failed is None:
-            try:
-                import sys
-                sys.path.insert(0, HERE)
-                from fish_length.predictor import FishLengthPredictor
-                _predictor = FishLengthPredictor(artifacts_dir=artifacts_dir(), device="auto")
-            except Exception as e:  # missing download, bad pickle, out of memory...
-                _failed = f"{type(e).__name__}: {e}"
-        return _predictor
+def _load_now():
+    global _predictor
+    import sys
+    import time
+    _load.update(state="loading", error="", since=time.time())
+    print("  Length model: loading (the first time downloads DINOv2, about 4 GB)...", flush=True)
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+    try:
+        sys.path.insert(0, HERE)
+        from fish_length.predictor import FishLengthPredictor
+        p = FishLengthPredictor(artifacts_dir=artifacts_dir(), device="auto")
+        with _lock:
+            _predictor = p
+        _load.update(state="ready")
+        print(f"  Length model: ready on {p.utils.device} ({time.time() - _load['since']:.0f} s)", flush=True)
+    except Exception as e:  # download blocked, bad pickle, out of memory...
+        _load.update(state="failed", error=f"{type(e).__name__}: {e}")
+        print("  Length model: FAILED to load - " + _load["error"], flush=True)
 
 
 def warm_up():
-    """Load the model in the background at start-up (the first load downloads DINOv2)."""
-    if status()["available"]:
-        threading.Thread(target=_get_predictor, daemon=True).start()
+    """Start loading in the background (never blocks a request)."""
+    if status()["available"] and _load["state"] in ("idle", "failed"):
+        _load["state"] = "loading"
+        threading.Thread(target=_load_now, daemon=True).start()
 
 
 def ready():
     return _predictor is not None
 
 
+def load_state():
+    return dict(_load)
+
+
 def predict_length_cm(image_path, key=None):
-    """Learned length (cm) for a photo, cached per photo; None if the model isn't available."""
+    """Learned length (cm) for a photo, cached per photo. None while the model isn't installed or
+    is still loading; callers fall back to the knuckle method then."""
     key = key or image_path
     if key in _cache:
         return _cache[key]
     if not status()["available"]:
         return None
-    p = _get_predictor()
-    if p is None:
+    if _predictor is None:
+        warm_up()
         return None
     with _lock:
-        value = float(p.predict_file(image_path))
+        value = float(_predictor.predict_file(image_path))
     if not value > 0:
         return None
     _cache[key] = value
@@ -115,4 +128,4 @@ def predict_length_cm(image_path, key=None):
 
 
 def load_error():
-    return _failed
+    return _load["error"] or None

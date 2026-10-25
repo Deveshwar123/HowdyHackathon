@@ -45,7 +45,11 @@ class FishLengthUtils(metaclass=Singleton):
         """Parses a device string and returns the corresponding torch.device (auto/cpu/cuda)."""
         s = (s or "auto").lower()
         if s == "auto":
-            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            if torch.cuda.is_available():
+                return torch.device("cuda")
+            if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+                return torch.device("mps")         # Apple-silicon Macs: much faster than CPU
+            return torch.device("cpu")
         if s in {"cuda", "gpu"}:
             return torch.device("cuda")
         return torch.device("cpu")

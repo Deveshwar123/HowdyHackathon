@@ -320,7 +320,9 @@ def model_info():
     st = length_ai.status()
     m = length_ai.metrics() or {}
     facts = length_ai.info() or {}
+    ls = length_ai.load_state()
     return {"available": st["available"], "reason": st["reason"], "ready": length_ai.ready(),
+            "load": ls["state"], "load_error": ls["error"],
             "trained_on": facts.get("n_train"), "source": facts.get("source"),
             "r2": m.get("r2"), "mae_cm": m.get("mae"), "n_test": m.get("n_test"),
             "n_train": m.get("n_train"), "mean_length_cm": m.get("mean_length"),
