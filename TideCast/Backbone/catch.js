@@ -269,8 +269,8 @@
 
   // ---- Manual marking (no AI, or the AI missed something) ----------------------------
   const STEPS = [
-    { label: 'Tap the tip of the snout', c: '#ef9168' },
-    { label: 'Tap the very end of the tail fin', c: '#ef9168' },
+    { label: 'Tap the tip of the snout', c: '#b90101' },
+    { label: 'Tap the very end of the tail fin', c: '#b90101' },
     { label: 'Tap the outer edge of your index knuckle', c: '#7fd6cf' },
     { label: 'Tap the outer edge of your pinky knuckle', c: '#7fd6cf' },
   ];

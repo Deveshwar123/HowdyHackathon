@@ -10,7 +10,7 @@
     { href: '/backbone/catch.html', label: 'Log a catch', cta: true, match: (p) => p.endsWith('/catch.html') },
   ];
   const LOGO = `<svg viewBox="0 0 64 40" width="58" height="36" aria-hidden="true">
-      <defs><linearGradient id="tc-lg" x1="0" x2="1"><stop offset="0" stop-color="#f7b28a"/><stop offset="1" stop-color="#e57a52"/></linearGradient></defs>
+      <defs><linearGradient id="tc-lg" x1="0" x2="1"><stop offset="0" stop-color="#b90101"/><stop offset="1" stop-color="#8c0327"/></linearGradient></defs>
       <path d="M3 11c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#tc-lg)" stroke-width="3.2" stroke-linecap="round"/>
       <path d="M3 21c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#tc-lg)" stroke-width="3.2" stroke-linecap="round"/>
       <path d="M3 31c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#tc-lg)" stroke-width="3.2" stroke-linecap="round"/>

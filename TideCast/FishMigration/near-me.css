@@ -12,9 +12,9 @@
 #nm-list button { display: grid; gap: 2px; width: 100%; padding: 8px 0; border: 0; border-bottom: 1px solid #eee; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
 #nm-list button:hover { background: #f6f8fa; }
 .nm-head { display: flex; justify-content: space-between; gap: 8px; }
-.nm-head em { font-style: normal; color: #c4623a; white-space: nowrap; }
+.nm-head em { font-style: normal; color: #b90101; white-space: nowrap; }
 .nm-kind { color: #777; font-size: 11px; }
 .nm-fish { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .nm-fish i { font-style: normal; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #eef3f7; }
-.nm-fish b { color: #c4623a; }
+.nm-fish b { color: #b90101; }
 .nm-credit { display: block; margin-top: 8px; color: #999; font-size: 9px; }

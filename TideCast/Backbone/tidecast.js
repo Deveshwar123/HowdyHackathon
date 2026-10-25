@@ -208,7 +208,7 @@ const earthMat = new THREE.ShaderMaterial({
       float wd = kmTo(ll, uTarget);
       float found = exp(-pow(wd / max(uAltKm * 0.006, 0.03), 2.0)) * uFound;
       found += exp(-pow((wd - uAltKm * 0.02 * (0.6 + 0.4 * sin(uTime * 1.2))) / max(uAltKm * 0.002, 0.01), 2.0)) * uFound * 0.6;
-      col += (ring + core * 1.4 + found * 1.2) * vec3(1.0, 0.48, 0.3) * 1.2;
+      col += (ring + core * 1.4 + found * 1.2) * vec3(0.95, 0.04, 0.07) * 1.2;
 
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
@@ -268,7 +268,7 @@ function glowTexture(inner, ring) {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-const spotTex = glowTexture('rgba(255,240,230,1)', 'rgba(240,110,80,1)');
+const spotTex = glowTexture('rgba(255,225,225,1)', 'rgba(185,1,1,1)');
 const spots = SPOTS.map(([lat, lon], i) => {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: spotTex, transparent: true, depthWrite: false }));
   s.position.copy(latLon(lat, lon, 1.004));
@@ -570,7 +570,7 @@ const compMat = new THREE.ShaderMaterial({
     vec3 sky(vec2 uv) {
       vec3 c = mix(vec3(0.006, 0.016, 0.03), vec3(0.018, 0.045, 0.08), smoothstep(0.0, 1.0, uv.y * 0.7 + (1.0 - uv.x) * 0.3));
       float g = exp(-pow(length((uv - vec2(1.0, 1.0)) * vec2(1.3, 1.0)) / 0.5, 2.0));
-      c += vec3(0.75, 0.32, 0.16) * g * 0.32;
+      c += vec3(0.55, 0.02, 0.07) * g * 0.36;
       c += pow(texture2D(tStars, uv * vec2(uRes.x / uRes.y, 1.0) * 0.6).rgb, vec3(2.2)) * 0.25;
       return mix(c, vec3(0.45, 0.62, 0.8), uSkyDay);
     }
