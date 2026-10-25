@@ -1,8 +1,9 @@
 // Tidecast — "Dive in".
-// One scroll-driven journey: Earth → your location (College Station by default) pinging slowly while
-// it finds the nearest water → a descent from orbit onto that water (Sentinel-2 / satellite imagery,
-// the same image carried from the globe down to the live 3D lake) → the waterline → beneath the
-// surface, where a hook catches fish → the leaderboard rising through the water. Every story element
+// One scroll-driven journey: Earth → your location (asked for on load; College Station until then)
+// pinging slowly while it finds the nearest water → a descent from orbit straight down onto that water
+// (satellite imagery carried from the globe into the live 3D lake) → through the surface → beneath it,
+// where a hook catches fish → the leaderboard rising through the water. After the journey the page
+// scrolls on normally into "How it works" and the stats. Every story element
 // is a pure function of scroll position, so the journey stops, reverses and scrubs exactly with the
 // scrollbar. Only ambient motion (globe spin, ping pulses, water, swimming fish, the hook) runs on its own.
 import * as THREE from 'three';
@@ -29,17 +30,22 @@ const R = {
   signal: [0.05, 0.22],
   descent: [0.22, 0.465],
   surface: [0.465, 0.6],
-  tilt: [0.53, 0.64],
-  low: [0.6, 0.7],
-  under: [0.72, 0.88],
+  plunge: [0.6, 0.66],
+  under: [0.64, 0.86],
   board: [0.86, 1.0],
 };
 let pTarget = 0;
 let p = 0;
 const seg = ([a, b]) => clamp((p - a) / (b - a), 0, 1);
 const bell = (a, b, c, d) => clamp((p - a) / (b - a), 0, 1) * (1 - clamp((p - c) / (d - c), 0, 1));
-const maxScroll = () => Math.max(1, document.documentElement.scrollHeight - innerHeight);
-const readScroll = () => (pTarget = clamp(scrollY / maxScroll(), 0, 1));
+// The journey runs over #track; the sections after it scroll normally.
+const track = document.getElementById('track');
+const maxScroll = () => Math.max(1, track.offsetTop + track.offsetHeight - innerHeight);
+let pastTrack = 0;
+const readScroll = () => {
+  pTarget = clamp(scrollY / maxScroll(), 0, 1);
+  pastTrack = Math.max(0, scrollY - maxScroll());
+};
 addEventListener('scroll', readScroll, { passive: true });
 const scrollToP = (f) => scrollTo({ top: f * maxScroll(), behavior: reduceMotion ? 'auto' : 'smooth' });
 
@@ -156,7 +162,7 @@ const earthMat = new THREE.ShaderMaterial({
       // Satellite imagery for the dive (lon/lat-aligned decals).
       vec2 rq = (ll - uRegionB.xy) / (uRegionB.zw - uRegionB.xy);
       vec2 lq = (ll - uLakeB.xy) / (uLakeB.zw - uLakeB.xy);
-      float rIn = edgeMask(rq, 0.06) * uRegionMix * uSatReady;
+      float rIn = edgeMask(rq, 0.22) * uRegionMix * uSatReady;
       float lIn = edgeMask(lq, 0.08) * uLakeMix * uSatReady;
       float decal = max(rIn, lIn);
 
@@ -401,7 +407,7 @@ function placeGlobe(dt, t) {
   globeState.altKm = altKm;
   const u = earthMat.uniforms;
   u.uAltKm.value = altKm;
-  u.uRegionMix.value = 1 - smooth(clamp((altKm - 300) / 600, 0, 1));
+  u.uRegionMix.value = 1 - smooth(clamp((altKm - 120) / 200, 0, 1));
   u.uLakeMix.value = 1 - smooth(clamp((altKm - 30) / 50, 0, 1));
   u.uHaze.value = 1 - smooth(clamp((altKm - 20) / 2500, 0, 1));
   u.uPing.value = seg([0.09, 0.2]) * (loc.km * 1.25 + 3);
@@ -525,21 +531,18 @@ sScene.add(skyDome);
 const upG = new THREE.Vector3();
 function placeSurface(t) {
   const W = innerWidth, H = innerHeight;
-  const eS = easeInOut(seg(R.surface));
-  const eT = easeInOut(seg(R.tilt));
-  const eL = easeInOut(seg(R.low));
-  // Straight down at first, matching the globe's last frame (same altitude, lens and turn).
-  const dist = p < R.surface[0] ? globeState.altKm * 1000 : Math.exp(lerp(Math.log(ALT_END_KM * 1000), Math.log(6), eS)) * lerp(1, 0.42, eL);
-  const pitch = (lerp(89.4, 10, eT) - 7 * eL) * D2R;
+  const eS = easeInOut(seg([R.surface[0], R.plunge[1]]));
+  // Straight down the whole way, matching the globe's last frame (same altitude, lens and turn),
+  // until the lens meets the water.
+  const dist = p < R.surface[0] ? globeState.altKm * 1000 : Math.exp(lerp(Math.log(ALT_END_KM * 1000), Math.log(0.25), eS));
   const roll = 0.5;
   upG.set(Math.sin(roll), 0, -Math.cos(roll));            // the globe camera's "up" on the ground
-  sCamera.position.copy(upG).multiplyScalar(-dist * Math.cos(pitch));
-  sCamera.position.y = dist * Math.sin(pitch);
-  sCamera.up.set(0, Math.cos(pitch), 0).addScaledVector(upG, Math.sin(pitch));
+  sCamera.position.set(0, dist, 0);
+  sCamera.up.copy(upG);
   sCamera.lookAt(0, 0, 0);
-  sCamera.fov = lerp(30, 46, eT);
-  sCamera.near = Math.max(0.02, sCamera.position.y * 0.2);
-  sCamera.setViewOffset(W, H, 0, -0.17 * H * eT * (1 - eL * 0.6), W, H);
+  sCamera.fov = 30;
+  sCamera.near = Math.max(0.02, dist * 0.2);
+  sCamera.setViewOffset(W, H, 0, 0, W, H);
   sCamera.updateProjectionMatrix();
   const u = groundMat.uniforms;
   u.uTime.value = t;
@@ -550,7 +553,7 @@ function placeSurface(t) {
   // Ring sizes follow the camera height, so the drop reads the same at every altitude.
   u.uRing.value = dist * 0.42 * (0.25 + seg([0.47, 0.63]));
   u.uWave.value = Math.max(0.22, dist * 0.035);
-  u.uRingA.value = bell(0.47, 0.5, 0.62, 0.68);
+  u.uRingA.value = bell(0.47, 0.5, 0.55, 0.59);
 }
 
 // ===========================================================================
@@ -836,12 +839,18 @@ function placeHook(t, W, H, showPop) {
   catchPop.style.opacity = pop.toFixed(3);
 }
 
-function placeUnder(t, waterY) {
+const lookFwd = new THREE.Vector3(), lookDown = new THREE.Vector3();
+function placeUnder(t, plunge) {
   const W = innerWidth, H = innerHeight;
   const eU = easeInOut(seg(R.under));
+  const eUp = easeInOut(seg([R.plunge[0] + 0.02, R.under[0] + 0.1]));   // from looking down to looking ahead
   const sway = Math.sin(t * 0.4) * 0.05;
-  uCamera.position.set(sway, lerp(-0.5, -1.25, eU), lerp(6.2, 3.4, eU));
-  uCamera.lookAt(sway * 2, lerp(-0.9, -1.55, eU), -4);
+  uCamera.position.set(sway, lerp(-0.25, -1.25, eU), lerp(5.2, 3.4, eU));
+  lookFwd.set(sway * 2, lerp(-0.9, -1.55, eU), -4).sub(uCamera.position).normalize();
+  lookDown.set(0, -1, -0.0001);
+  lookDown.lerp(lookFwd, eUp).normalize();
+  uCamera.up.set(0, eUp, -(1 - eUp)).normalize();          // no roll, so the horizon comes up level
+  uCamera.lookAt(lookDown.add(uCamera.position));
   uCamera.updateProjectionMatrix();
   underSurfMat.uniforms.uTime.value = t;
   underSurfMat.uniforms.uCam.value.copy(uCamera.position);
@@ -857,7 +866,7 @@ function placeUnder(t, waterY) {
     o.holder.lookAt(o.next);
     o.uni.uTime.value = t;
   }
-  placeHook(t, W, H, waterY < 0.2 && p < R.board[0]);
+  placeHook(t, W, H, plunge >= 1 && p < R.board[0]);
 }
 
 // ===========================================================================
@@ -868,13 +877,13 @@ const compMat = new THREE.ShaderMaterial({
   uniforms: {
     tGlobe: { value: RT.globe.texture }, tSurface: { value: RT.surface.texture }, tUnder: { value: RT.under.texture },
     tStars: { value: tex('assets/stars.jpg') },
-    wSurface: { value: 0 }, uUnder: { value: 0 }, uWaterY: { value: 2 },
+    wSurface: { value: 0 }, uPlunge: { value: 0 },
     uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uSkyDay: { value: 0 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tGlobe, tSurface, tUnder, tStars;
-    uniform float wSurface, uUnder, uWaterY, uTime, uSkyDay;
+    uniform float wSurface, uPlunge, uTime, uSkyDay;
     uniform vec2 uRes;
     varying vec2 vUv;
     vec3 sky(vec2 uv) {
@@ -890,17 +899,17 @@ const compMat = new THREE.ShaderMaterial({
       vec3 col = g.rgb + sky(uv) * (1.0 - clamp(g.a, 0.0, 1.0));
       if (wSurface > 0.0) col = mix(col, texture2D(tSurface, uv).rgb, wSurface);
 
-      // The waterline: a half-submerged lens.
-      if (uUnder > 0.0) {
-        float ys = 1.0 - uv.y;
-        float wl = uWaterY + 0.005 * sin(uv.x * 17.0 + uTime * 1.6) + 0.003 * sin(uv.x * 43.0 - uTime * 2.4);
-        if (ys > wl) {
-          vec2 uu = uv + vec2(0.004 * sin(ys * 38.0 + uTime * 1.8), 0.0);
+      // Through the surface: the water closes over the lens from the centre outward.
+      if (uPlunge > 0.0) {
+        vec2 c = (uv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
+        float a = atan(c.y, c.x);
+        float R = uPlunge * uPlunge * 1.25;
+        float r = length(c) + (0.02 * sin(a * 7.0 + uTime * 2.0) + 0.012 * sin(a * 13.0 - uTime * 3.0)) * min(1.0, R * 6.0);
+        if (r < R) {
+          vec2 uu = uv + c * 0.05 * (1.0 - uPlunge) * sin(r * 40.0 - uTime * 4.0);
           col = texture2D(tUnder, uu).rgb;
-          col *= 1.0 - 0.25 * exp(-(ys - wl) * uRes.y / 60.0);
         }
-        float m = exp(-pow((ys - wl) * uRes.y / 2.4, 2.0));
-        col += m * vec3(0.8, 0.95, 1.0) * 0.55;
+        col += exp(-pow((r - R) * uRes.y / 5.0, 2.0)) * vec3(0.85, 0.96, 1.0) * 0.7 * smoothstep(0.0, 0.06, R) * (1.0 - smoothstep(0.85, 1.0, uPlunge));
       }
       float v = smoothstep(1.25, 0.35, length((uv - 0.5) * vec2(uRes.x / uRes.y, 1.0)));
       col *= mix(0.82, 1.0, v);
@@ -963,7 +972,6 @@ async function setWater(w) {
   earthMat.uniforms.uTarget.value.set(w.lon, w.lat);
   groundMat.uniforms.uTarget.value.set(w.lon, w.lat);
   moveLabel('water', w.lat, w.lon, `${w.name} · ${fmtKm(loc.km)}`);
-  renderSpots();
   SAT.ready.value = 0;
   let shape = null;
   if (!w.sat && w.osm) {
@@ -1010,7 +1018,7 @@ function setUser(user) {
 }
 
 // ===========================================================================
-// "Find your location" and spots to fish around you
+// Your location: asked for on load; the nearest water becomes the dive
 // ===========================================================================
 
 const fetchJSON = async (url) => {
@@ -1020,28 +1028,7 @@ const fetchJSON = async (url) => {
 };
 const fmtKm = (km) => (km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const spotsList = $('#spots-list');
-const spotsWhere = $('#spots-where');
-const locateBtn = $('#locate');
-
-function curatedNear(user) {
-  return (window.TIDECAST_WATERS || []).map((w) => ({ ...w, km: kmBetween(user, w) })).sort((a, b) => a.km - b.km);
-}
-
-function renderSpots() {
-  spotsList.innerHTML = loc.waters.slice(0, isSmall() ? 2 : 3).map((w, i) => {
-    const fish = fishFor(w).slice(0, isSmall() ? 2 : 3).map((id) => FISH_INFO[id]);
-    return `<li><button type="button" data-i="${i}" aria-pressed="${w === loc.water}">
-      <span class="spot-head"><strong>${esc(w.name)}</strong><em>${fmtKm(w.km)}</em></span>
-      <span class="spot-kind">${esc(w.kind || 'Water')}</span>
-      <span class="spot-fish">${fish.map((f) => `<i>${esc(f.name)} <b>${f.points}</b></i>`).join('')}</span>
-    </button></li>`;
-  }).join('');
-}
-spotsList.addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-i]');
-  if (b) setWater(loc.waters[+b.dataset.i]);
-});
+const curatedNear = (user) => (window.TIDECAST_WATERS || []).map((w) => ({ ...w, km: kmBetween(user, w) })).sort((a, b) => a.km - b.km);
 
 async function findWaters(user) {
   try {
@@ -1053,70 +1040,55 @@ async function findWaters(user) {
 
 async function useLocation(user, known = false) {
   setUser(user);
-  spotsWhere.innerHTML = `Finding water near <b>${esc(user.name)}</b>…`;
-  // The default location uses the built-in list, so the opening dive is always the same;
-  // a real location asks OpenStreetMap for every named water around it.
+  // The default location uses the built-in list; a real location asks OpenStreetMap for every
+  // named water around it.
   const waters = known ? await findWaters(user) : curatedNear(user);
   // The baked imagery of a built-in water is better than a runtime fetch of the same place.
   const curated = window.TIDECAST_WATERS || [];
-  loc.waters = waters.map((w) => curated.find((c) => c.sat && kmBetween(c, w) < 2.5) ? { ...curated.find((c) => c.sat && kmBetween(c, w) < 2.5), km: w.km } : w);
-  spotsWhere.innerHTML = `Spots near <b>${esc(user.name)}</b>${known ? '' : ' <span>(default)</span>'}`;
+  const baked = (w) => curated.find((c) => c.sat && kmBetween(c, w) < 2.5);
+  loc.waters = waters.map((w) => (baked(w) ? { ...baked(w), km: w.km } : w));
   await setWater(loc.waters[0]);
 }
 
-function locate() {
-  if (!navigator.geolocation) {
-    spotsWhere.textContent = 'This browser can’t share a location.';
-    return;
-  }
-  locateBtn.disabled = true;
-  locateBtn.classList.add('busy');
-  spotsWhere.textContent = 'Finding your location…';
+function askLocation() {
+  if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(async (pos) => {
     const user = { lat: pos.coords.latitude, lon: pos.coords.longitude, name: 'your location' };
     try {
       const r = await fetchJSON(`/api/reverse?lat=${user.lat.toFixed(4)}&lon=${user.lon.toFixed(4)}`);
       if (r.name) user.name = r.name;
     } catch { /* keep the generic name */ }
-    await useLocation(user, true);
-    locateBtn.disabled = false;
-    locateBtn.classList.remove('busy');
-  }, () => {
-    spotsWhere.innerHTML = `Location unavailable — showing spots near <b>${esc(HOME.name)}</b>`;
-    locateBtn.disabled = false;
-    locateBtn.classList.remove('busy');
-  }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 });
+    useLocation(user, true);
+  }, () => { /* declined or unavailable: stay with the default */ }, { timeout: 20000, maximumAge: 600000 });
 }
-locateBtn.onclick = locate;
 
 // ===========================================================================
-// DOM: hero, spots panel, leaderboard
+// DOM: hero, leaderboard
 // ===========================================================================
 
 const hero = $('#hero');
 const hint = $('#scroll-hint');
 const board = $('#board');
-const spotsPanel = $('#spots');
 const chapterBtns = [...document.querySelectorAll('#chapters button')];
 
 function placeDom() {
+  document.body.classList.toggle('past-track', pastTrack > innerHeight * 0.5);
   const H = innerHeight;
   const hOut = seg(R.heroOut);
   hero.style.opacity = (1 - hOut).toFixed(3);
   hero.style.transform = `translateY(${(-60 * hOut).toFixed(1)}px)`;
   hero.style.visibility = hOut >= 1 ? 'hidden' : 'visible';
   hint.style.opacity = (1 - seg([0, 0.02])).toFixed(3);
-  const sp = bell(0.03, 0.07, 0.84, 0.87);
-  spotsPanel.style.opacity = sp.toFixed(3);
-  spotsPanel.style.transform = `translateY(${((1 - sp) * 16).toFixed(1)}px)`;
-  spotsPanel.style.visibility = sp > 0.01 ? 'visible' : 'hidden';
   // Leaderboard: rises up through the water and settles in front of the fish at the end.
   const eB = seg(R.board);
   board.style.visibility = eB > 0 ? 'visible' : 'hidden';
-  board.style.transform = `translate(-50%, calc(-46% + ${((1 - easeOut(eB)) * 1.15 * H).toFixed(1)}px))`;
+  // ...and scrolls away with the page into the sections after the journey.
+  board.style.transform = `translate(-50%, calc(-46% + ${((1 - easeOut(eB)) * 1.15 * H - pastTrack).toFixed(1)}px))`;
   board.inert = eB < 0.98;
   document.body.classList.toggle('in-water', p > 0.5);
-  const nearest = chapterBtns.reduce((best, b) => (Math.abs(+b.dataset.to - p) < Math.abs(+best.dataset.to - p) ? b : best), chapterBtns[0]);
+  const at = (b) => (b.dataset.section ? 1 + (document.getElementById(b.dataset.section).getBoundingClientRect().top + scrollY - maxScroll()) / innerHeight : +b.dataset.to);
+  const here = p + pastTrack / innerHeight;
+  const nearest = chapterBtns.reduce((best, b) => (Math.abs(at(b) - here) < Math.abs(at(best) - here) ? b : best), chapterBtns[0]);
   chapterBtns.forEach((b) => b.classList.toggle('on', b === nearest));
 }
 
@@ -1141,14 +1113,46 @@ function renderBoard(period = 'week') {
 }
 
 // ===========================================================================
-// Frame loop
+// Stats (stats.js): numbers count up when they come into view
 // ===========================================================================
 
-// Where the waterline sits on screen (fraction from the top; > 1 = not visible, < 0 = all under).
-function waterline() {
-  if (p < 0.645) return 2;
-  return lerp(lerp(1.08, 0.5, easeInOut(seg([0.645, 0.69]))), -0.08, easeInOut(seg([0.7, 0.76])));
+function renderStats() {
+  const S = window.TIDECAST_STATS || {};
+  const card = (x) => `<article class="stat${x.placeholder ? ' placeholder' : ''}">
+      <strong data-value="${x.value ?? ''}" data-prefix="${esc(x.prefix || '')}" data-suffix="${esc(x.suffix || '')}" data-decimals="${x.decimals || 0}">${x.value == null ? '—' : esc(x.prefix || '') + '0' + esc(x.suffix || '')}</strong>
+      <span>${esc(x.label)}</span>${x.note ? `<small>${esc(x.note)}</small>` : ''}
+      ${x.placeholder ? '<em>Placeholder</em>' : ''}</article>`;
+  for (const [id, list] of [['stats-market', S.market], ['stats-impact', S.impact], ['stats-model', S.model]]) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = (list || []).map(card).join('');
+  }
+  const src = document.getElementById('stats-sources');
+  if (src) src.innerHTML = (S.sources || []).map((x) => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a></li>`).join('');
+  const count = (el) => {
+    const v = parseFloat(el.dataset.value);
+    if (Number.isNaN(v)) return;
+    const d = +el.dataset.decimals, t0 = performance.now();
+    const fmt = (x) => el.dataset.prefix + x.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }) + el.dataset.suffix;
+    if (reduceMotion) return (el.textContent = fmt(v));
+    const step = (now) => {
+      const k = clamp((now - t0) / 1400, 0, 1);
+      el.textContent = fmt(v * easeOut(k));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (e.isIntersecting) {
+      count(e.target);
+      io.unobserve(e.target);
+    }
+  }), { threshold: 0.6 });
+  document.querySelectorAll('.stat strong[data-value]').forEach((el) => io.observe(el));
 }
+
+// ===========================================================================
+// Frame loop
+// ===========================================================================
 
 function resize() {
   const W = innerWidth, H = innerHeight, dpr = DPR();
@@ -1171,10 +1175,10 @@ function frame(now) {
   if (Math.abs(pTarget - p) < 1e-5) p = pTarget;
 
   const wSurface = seg([0.455, 0.47]);
-  const waterY = waterline();
+  const plunge = easeInOut(seg(R.plunge));
   const globeOn = wSurface < 1;
-  const underOn = waterY < 1.02;
-  const surfaceOn = wSurface > 0 && waterY > -0.04;
+  const underOn = plunge > 0;
+  const surfaceOn = wSurface > 0 && plunge < 1;
 
   if (globeOn) {
     placeGlobe(dt, clock);
@@ -1191,7 +1195,7 @@ function frame(now) {
     renderer.render(sScene, sCamera);
   }
   if (underOn) {
-    placeUnder(clock, waterY);
+    placeUnder(clock, plunge);
     renderer.setRenderTarget(RT.under);
     renderer.render(uScene, uCamera);
   } else {
@@ -1200,8 +1204,7 @@ function frame(now) {
 
   const cu = compMat.uniforms;
   cu.wSurface.value = wSurface;
-  cu.uUnder.value = underOn ? 1 : 0;
-  cu.uWaterY.value = waterY;
+  cu.uPlunge.value = plunge;
   cu.uSkyDay.value = seg([0.3, 0.45]);
   cu.uTime.value = clock;
   renderer.setRenderTarget(null);
@@ -1215,23 +1218,23 @@ function frame(now) {
 // Events
 // ===========================================================================
 
-addEventListener('resize', () => { resize(); renderSpots(); });
+const toSection = (id) => document.getElementById(id).scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+addEventListener('resize', resize);
 $('#nav-leaderboard').onclick = () => scrollToP(1);
 $('#teaser').onclick = () => scrollToP(1);
 $('#back').onclick = () => scrollToP(0);
-chapterBtns.forEach((b) => (b.onclick = () => scrollToP(+b.dataset.to)));
+$('#to-top').onclick = () => scrollToP(0);
+chapterBtns.forEach((b) => (b.onclick = () => (b.dataset.section ? toSection(b.dataset.section) : scrollToP(+b.dataset.to))));
 document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => renderBoard(b.dataset.period)));
-$('#nav-how').onclick = () => ($('#how').hidden = false);
-$('#how-close').onclick = () => ($('#how').hidden = true);
-$('#how').onclick = (e) => { if (e.target.id === 'how') $('#how').hidden = true; };
-addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#how').hidden = true; });
+$('#nav-how').onclick = () => toSection('program');
+$('#board-how').onclick = () => toSection('program');
 
 renderBoard('week');
 resize();
 if (location.hash === '#leaderboard') requestAnimationFrame(() => scrollTo(0, maxScroll()));
+renderStats();
 p = pTarget;
-// Start at College Station (or wherever TIDECAST_HOME says); if the visitor already allowed
-// location access, use where they really are.
+// Start at College Station (or wherever TIDECAST_HOME says) and ask where the visitor really is.
 useLocation({ ...HOME });
-navigator.permissions?.query({ name: 'geolocation' }).then((s) => { if (s.state === 'granted') locate(); }).catch(() => {});
+askLocation();
 requestAnimationFrame(frame);

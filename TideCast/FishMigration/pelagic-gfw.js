@@ -1475,4 +1475,9 @@
 
   if (window.pelagicViewer) init(window.pelagicViewer);
   window.addEventListener('pelagic:viewer', (e) => init(e.detail));
+  // Lets other atlas add-ons (near-me.js) add an area and fly to it.
+  window.PelagicExplorer = {
+    addArea: (name, bbox) => { addArea(name, bbox); zoomTo(bbox); },
+    flyTo: (lon, lat, km) => state.viewer && state.viewer.camera.flyTo({ destination: window.Cesium.Cartesian3.fromDegrees(lon, lat, km * 1000), duration: 1.4 }),
+  };
 })();

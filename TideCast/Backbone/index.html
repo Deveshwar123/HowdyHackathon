@@ -13,6 +13,7 @@
   <script src="leaderboard.js"></script>
   <script src="fish-points.js"></script>
   <script src="waters.js"></script>
+  <script src="stats.js"></script>
 </head>
 <body>
   <!-- The whole journey is one WebGL canvas driven by the page's scroll position -->
@@ -48,16 +49,6 @@
   </main>
   <div id="scroll-hint" aria-hidden="true"><span>Scroll to dive in</span><i></i></div>
 
-  <!-- Your location and the spots to fish around it -->
-  <aside id="spots" aria-labelledby="spots-title">
-    <header>
-      <div><small>FISH NEAR YOU</small><h2 id="spots-title">Spots around you</h2></div>
-      <button id="locate" type="button"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Find my location</button>
-    </header>
-    <p id="spots-where" aria-live="polite"></p>
-    <ol id="spots-list"></ol>
-  </aside>
-
   <nav id="chapters" aria-label="Chapters">
     <button data-to="0" aria-label="Earth"><span>Earth</span></button>
     <button data-to="0.18" aria-label="Your water"><span>Your water</span></button>
@@ -65,6 +56,8 @@
     <button data-to="0.58" aria-label="Surface"><span>Surface</span></button>
     <button data-to="0.8" aria-label="Beneath"><span>Beneath</span></button>
     <button data-to="1" aria-label="Leaderboard"><span>Leaderboard</span></button>
+    <button data-section="program" aria-label="How it works"><span>How it works</span></button>
+    <button data-section="stats" aria-label="By the numbers"><span>By the numbers</span></button>
   </nav>
 
   <section id="board" aria-labelledby="board-title">
@@ -79,25 +72,61 @@
     <ol class="rows" id="rows"></ol>
     <footer>
       <button id="back" type="button">↑ Back to the globe</button>
+      <button id="board-how" type="button">How do I get on the board? ↓</button>
       <a class="cta small" href="../">EXPLORE THE WATERS →</a>
     </footer>
   </section>
 
-  <section id="how" role="dialog" aria-modal="true" aria-labelledby="how-title" hidden>
-    <div class="how-card">
-      <button class="how-close" id="how-close" aria-label="Close">×</button>
-      <small>HOW IT WORKS</small>
-      <h2 id="how-title">Three steps to your next great catch</h2>
-      <ol>
-        <li><b>Find water near you.</b> Share your location and see the lakes, rivers and bays around you, and which fish to go for.</li>
-        <li><b>Learn what’s biting.</b> Explore the globe in the fish atlas: every species recorded in a stretch of water, live from OBIS, with fishing activity from Global Fishing Watch.</li>
-        <li><b>Make every catch count.</b> Upload a photo of your catch, earn points for the species, and climb the Tidecast leaderboard.</li>
-      </ol>
-    </div>
-  </section>
-
   <!-- Scroll length of the journey -->
   <div id="track" aria-hidden="true"></div>
+
+  <!-- After the journey: the page scrolls on normally over the water -->
+  <div id="after">
+    <section id="program" class="after-section" aria-labelledby="program-title">
+      <small class="kicker">HOW IT WORKS</small>
+      <h2 id="program-title">From your nearest water to the leaderboard</h2>
+      <!-- Placeholder: swap this frame for the program video / walkthrough -->
+      <div class="program-frame" role="img" aria-label="Program walkthrough placeholder">
+        <span class="ph-tag">Placeholder</span>
+        <svg viewBox="0 0 24 24" width="54" height="54" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10 8l6 4-6 4z" fill="currentColor"/></svg>
+        <strong>Program walkthrough</strong>
+        <span>Video or interactive demo of the TideCast app goes here.</span>
+      </div>
+      <ol class="steps">
+        <li><b>Find water near you</b><span>Open <a href="../">Explore the waters</a> and tap <em>Spots near me</em>: nearby lakes, rivers and bays, and which fish to go for.</span></li>
+        <li><b>Learn what’s biting</b><span>Every species recorded in that water (OBIS), plus fishing activity from Global Fishing Watch, on the 3D globe.</span></li>
+        <li><b>Catch and snap</b><span>Photograph the whole fish, side-on, on a measuring board or next to a reference object.</span></li>
+        <li><b>Upload</b><span>Our model identifies the species and estimates its length; your location and time are attached.</span></li>
+        <li><b>Earn points</b><span>Points by species, size and the scoring rules — then climb the weekly and all-time boards.</span></li>
+      </ol>
+      <div class="rules">
+        <div class="rules-head"><h3>To get on the leaderboard</h3><span class="ph-tag">Placeholder rules</span></div>
+        <ul>
+          <li>Create a TideCast account and allow location while fishing.</li>
+          <li>Upload a clear photo of each catch within 24 hours, whole fish visible.</li>
+          <li>The catch must be legal: licensed angler, in season, at or above size limits.</li>
+          <li>One fish per photo; no repeats of the same fish.</li>
+          <li>Weekly board resets every Monday; all-time keeps every catch.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="stats" class="after-section" aria-labelledby="stats-title">
+      <small class="kicker">BY THE NUMBERS</small>
+      <h2 id="stats-title">A big market, a measurable impact</h2>
+      <h3 class="stats-group">The market</h3>
+      <div class="stat-grid" id="stats-market"></div>
+      <h3 class="stats-group">Our impact</h3>
+      <div class="stat-grid" id="stats-impact"></div>
+      <h3 class="stats-group">The model</h3>
+      <div class="stat-grid" id="stats-model"></div>
+      <ul class="sources" id="stats-sources"></ul>
+      <footer class="after-foot">
+        <a class="cta small" href="../">EXPLORE THE WATERS →</a>
+        <button id="to-top" type="button">↑ Back to the globe</button>
+      </footer>
+    </section>
+  </div>
 
   <script type="module" src="tidecast.js"></script>
 </body>

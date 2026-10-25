@@ -9,7 +9,7 @@ window.TIDECAST_WATERS = [
     name: 'Lake Bryan', kind: 'Reservoir', lat: 30.7104, lon: -96.4737, water: 'fresh',
     fish: ['largemouth', 'hybrid-striper', 'channel-catfish', 'white-crappie', 'bluegill'],
     sat: {
-      region: 'assets/region.jpg', regionB: [-96.80, 30.42, -96.14, 30.94],
+      region: 'assets/region.jpg', regionB: [-96.92, 30.20, -95.80, 31.10],
       lake: 'assets/lake-sat.jpg', mask: 'assets/lake-mask.png', lakeB: [-96.5205, 30.6689, -96.4265, 30.7499],
     },
   },
