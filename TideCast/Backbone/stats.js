@@ -24,6 +24,14 @@ window.TIDECAST_STATS = {
     { live: 'model_n_test', label: 'test photos it has never seen', note: 'Scored after training', modelStat: true },
     { live: 'species_known', label: 'species it can score', note: 'Each with its own length–weight curve' },
   ],
+  // Shown instead of `model` until the trained model's test results (metrics.json) are added:
+  // real figures for the knuckle method the site measures with today.
+  modelFallback: [
+    { value: 1, label: 'photo is all it needs', note: 'No scale, no tape: your knuckles are the ruler' },
+    { live: 'knuckle_spans', label: 'knuckle spans read per photo', note: 'Index–pinky and middle–pinky; the median wins' },
+    { live: 'knuckle_weight_err_pct', prefix: '±', suffix: '%', label: 'honest weight range', note: 'From ±10% length, carried through each species’ length–weight curve' },
+    { live: 'species_known', label: 'species it can score', note: 'Each with its own length–weight curve' },
+  ],
   sources: [
     { name: 'RBFF / Outdoor Foundation, 2025 Special Report on Fishing (2024 data)', url: 'https://www.nmma.org/press/article/25183' },
     { name: 'American Sportfishing Association, Sportfishing in America (2025)', url: 'https://asafishing.org/industry/sportfishing-economic-impact/' },

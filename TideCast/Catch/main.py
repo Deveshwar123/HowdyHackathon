@@ -320,7 +320,12 @@ def model_info():
     m = length_ai.metrics() or {}
     return {"available": st["available"], "reason": st["reason"], "ready": length_ai.ready(),
             "r2": m.get("r2"), "mae_cm": m.get("mae"), "n_test": m.get("n_test"),
-            "n_train": m.get("n_train"), "mean_length_cm": m.get("mean_length")}
+            "n_train": m.get("n_train"), "mean_length_cm": m.get("mean_length"),
+            # The knuckle method's built-in error: length ±LENGTH_ERROR_FRAC carried through
+            # weight = a*L^3, plus natural plumpness spread.
+            "knuckle_weight_err_pct": round(100 * ((3 * measure.LENGTH_ERROR_FRAC) ** 2
+                                                   + measure.CONDITION_ERROR_FRAC ** 2) ** 0.5),
+            "knuckle_length_err_pct": round(100 * measure.LENGTH_ERROR_FRAC)}
 
 
 def stats(_query=None):
