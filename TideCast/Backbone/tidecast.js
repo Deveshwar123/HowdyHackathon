@@ -1,10 +1,10 @@
-// Tidecast — "Follow the Ping".
-// One scroll-driven journey: Earth → a tag ping from Lake Somerville, Texas → descent from orbit
-// through the atmosphere and a cloud deck (Sentinel-2 imagery) → the lake surface, where the ping
-// becomes a ripple → the waterline → tagged fish tracked underwater → the leaderboard rising out
-// of the water. Every story element is a pure function of scroll position, so the journey stops,
-// reverses and scrubs exactly with the scrollbar. Only ambient motion (globe spin, water, fish
-// swimming, leaf sway) runs on its own.
+// Tidecast — "Dive in".
+// One scroll-driven journey: Earth → your location (College Station by default) pinging slowly while
+// it finds the nearest water → a descent from orbit onto that water (Sentinel-2 / satellite imagery,
+// the same image carried from the globe down to the live 3D lake) → the waterline → beneath the
+// surface, where a hook catches fish → the leaderboard rising through the water. Every story element
+// is a pure function of scroll position, so the journey stops, reverses and scrubs exactly with the
+// scrollbar. Only ambient motion (globe spin, ping pulses, water, swimming fish, the hook) runs on its own.
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/addons/loaders/GLTFLoader.js';
 
@@ -15,6 +15,7 @@ const smooth = (t) => t * t * (3 - 2 * t);
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 const D2R = Math.PI / 180;
+const M_PER_DEG = 111195;               // metres per degree on the globe's sphere
 const isSmall = () => innerWidth < 860;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -27,10 +28,9 @@ const R = {
   heroOut: [0.0, 0.05],
   signal: [0.05, 0.22],
   descent: [0.22, 0.465],
-  clouds: [0.4, 0.5],
-  surface: [0.455, 0.6],
+  surface: [0.465, 0.6],
   tilt: [0.53, 0.64],
-  toPhoto: [0.615, 0.645],
+  low: [0.6, 0.7],
   under: [0.72, 0.88],
   board: [0.86, 1.0],
 };
@@ -44,6 +44,21 @@ addEventListener('scroll', readScroll, { passive: true });
 const scrollToP = (f) => scrollTo({ top: f * maxScroll(), behavior: reduceMotion ? 'auto' : 'smooth' });
 
 // ===========================================================================
+// Where you are, and the water nearest you
+// ===========================================================================
+
+const FISH_INFO = Object.fromEntries((window.TIDECAST_FISH || []).map((f) => [f.id, f]));
+const DEFAULT_FISH = window.TIDECAST_DEFAULT_FISH || { fresh: [], salt: [] };
+const HOME = window.TIDECAST_HOME || { name: 'College Station, TX', lat: 30.628, lon: -96.334 };
+const kmBetween = (a, b) => {
+  const p1 = a.lat * D2R, p2 = b.lat * D2R;
+  const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(((b.lon - a.lon) * D2R) / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+};
+const fishFor = (w) => (w.fish && w.fish.length ? w.fish : DEFAULT_FISH[w.water || 'fresh'] || []).filter((id) => FISH_INFO[id]);
+const loc = { user: { ...HOME }, water: null, waters: [], km: 1 };
+
+// ===========================================================================
 // Renderer, layers and compositor
 // ===========================================================================
 
@@ -54,16 +69,17 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 const DPR = () => Math.min(window.devicePixelRatio || 1, isSmall() ? 1.5 : 2);
 const makeRT = (samples) => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples });
-const RT = { globe: makeRT(4), surface: makeRT(0), photo: makeRT(0), under: makeRT(4) };
+const RT = { globe: makeRT(4), surface: makeRT(0), under: makeRT(4) };
 
 const loader = new THREE.TextureLoader();
-const tex = (url, srgb = true, wrap = false) => {
-  const t = loader.load(url);
+const prep = (t, srgb = true, wrap = false) => {
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   if (wrap) t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 };
+const tex = (url, srgb = true, wrap = false) => prep(loader.load(url), srgb, wrap);
+const loadTex = (url, srgb = true) => new Promise((ok, fail) => loader.load(url, (t) => ok(prep(t, srgb)), undefined, fail));
 
 const NOISE = /* glsl */ `
   float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -75,16 +91,22 @@ const NOISE = /* glsl */ `
   float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 6; i++) { s += a * vnoise(p); p = p * 2.03 + 3.1; a *= 0.5; } return s; }
 `;
 
+// Satellite imagery of the dive: a regional image, a close-up of the water and its water mask.
+// Shared by the globe (as lon/lat decals) and the 3D lake surface (as the ground), so the picture
+// stays the same from orbit down to the water.
+const blank = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+blank.needsUpdate = true;
+const SAT = {
+  region: { value: blank }, lake: { value: blank }, mask: { value: blank },
+  regionB: { value: new THREE.Vector4(0, 0, 1, 1) }, lakeB: { value: new THREE.Vector4(0, 0, 1, 1) },
+  ready: { value: 0 },
+};
+
 // ===========================================================================
 // Layer 1 — the globe
 // ===========================================================================
 
-const TARGET = { lat: 30.307, lon: -96.5855 };           // open water, Lake Somerville
-const PIN = { lat: 30.628, lon: -96.334 };               // College Station
 const EARTH_KM = 6371;
-const REGION_B = [-96.9126365, 29.7234785, -95.7864375, 30.6962704];   // Sentinel-2 tile 14RQU (lon/lat)
-const LAKE_B = [-96.705, 30.27, -96.535, 30.4];
-
 const gScene = new THREE.Scene();
 const gCamera = new THREE.PerspectiveCamera(30, 1, 0.01, 50);
 const tilt = new THREE.Group();
@@ -99,20 +121,16 @@ const earthMat = new THREE.ShaderMaterial({
     uNight: { value: tex('assets/earth-night.jpg') },
     uRelief: { value: tex('assets/earth-relief.jpg', false) },
     uWater: { value: tex('assets/earth-water.jpg', false) },
-    uRegion: { value: tex('assets/region.jpg') },
-    uLakeSat: { value: tex('assets/lake-sat.jpg') },
-    uRegionB: { value: new THREE.Vector4(...REGION_B) },
-    uLakeB: { value: new THREE.Vector4(...LAKE_B) },
+    uRegion: SAT.region, uLakeSat: SAT.lake, uRegionB: SAT.regionB, uLakeB: SAT.lakeB, uSatReady: SAT.ready,
     uRegionMix: { value: 0 }, uLakeMix: { value: 0 },
-    uTarget: { value: new THREE.Vector2(TARGET.lon, TARGET.lat) },
-    uAltKm: { value: 10000 }, uPing: { value: 0 }, uPingA: { value: 0 }, uPulse: { value: 0 },
-    uHaze: { value: 0 }, uCloudA: { value: 1 },
-    uSun: { value: SUN }, uTime: { value: 0 },
+    uPin: { value: new THREE.Vector2(HOME.lon, HOME.lat) }, uTarget: { value: new THREE.Vector2(HOME.lon, HOME.lat) },
+    uAltKm: { value: 10000 }, uPing: { value: 0 }, uPingA: { value: 0 }, uPulse: { value: 0 }, uFound: { value: 0 },
+    uHaze: { value: 0 }, uSun: { value: SUN }, uTime: { value: 0 },
   },
   vertexShader: /* glsl */ `
-    varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vObj; varying vec3 vNorth;
+    varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vNorth;
     void main() {
-      vUv = uv; vObj = position;
+      vUv = uv;
       vN = normalize(normalMatrix * normal);
       vNorth = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));
       vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -121,25 +139,25 @@ const earthMat = new THREE.ShaderMaterial({
     }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D uDay, uNight, uRelief, uWater, uRegion, uLakeSat;
-    uniform vec4 uRegionB, uLakeB; uniform vec2 uTarget;
-    uniform float uRegionMix, uLakeMix, uAltKm, uPing, uPingA, uPulse, uHaze, uCloudA, uTime;
+    uniform vec4 uRegionB, uLakeB; uniform vec2 uPin, uTarget;
+    uniform float uRegionMix, uLakeMix, uSatReady, uAltKm, uPing, uPingA, uPulse, uFound, uHaze, uTime;
     uniform vec3 uSun;
-    varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vObj; varying vec3 vNorth;
-    ${NOISE}
+    varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vNorth;
     float edgeMask(vec2 q, float f) {
       return smoothstep(0.0, f, q.x) * smoothstep(0.0, f, 1.0 - q.x) * smoothstep(0.0, f, q.y) * smoothstep(0.0, f, 1.0 - q.y);
     }
+    float kmTo(vec2 ll, vec2 c) { return length(vec2((ll.x - c.x) * cos(radians(c.y)), ll.y - c.y)) * 111.195; }
     void main() {
       vec3 V = normalize(-vPos);
       vec3 N = normalize(vN);
       vec3 L = normalize(uSun);
       vec2 ll = vec2(vUv.x * 360.0 - 180.0, vUv.y * 180.0 - 90.0);
 
-      // Sentinel-2 imagery for the dive (lon/lat-aligned decals).
+      // Satellite imagery for the dive (lon/lat-aligned decals).
       vec2 rq = (ll - uRegionB.xy) / (uRegionB.zw - uRegionB.xy);
       vec2 lq = (ll - uLakeB.xy) / (uLakeB.zw - uLakeB.xy);
-      float rIn = edgeMask(rq, 0.06) * uRegionMix;
-      float lIn = edgeMask(lq, 0.08) * uLakeMix;
+      float rIn = edgeMask(rq, 0.06) * uRegionMix * uSatReady;
+      float lIn = edgeMask(lq, 0.08) * uLakeMix * uSatReady;
       float decal = max(rIn, lIn);
 
       float h = texture2D(uRelief, vUv).r;
@@ -171,27 +189,26 @@ const earthMat = new THREE.ShaderMaterial({
       col += (pow(nh, 1400.0) * 0.3 + pow(nh, 160.0) * 0.025) * water * vec3(1.0, 0.86, 0.68) * lit;
       col += texture2D(uNight, vUv).rgb * vec3(1.0, 0.72, 0.42) * 1.8 * (1.0 - lit);
 
-      vec3 cp = vObj * vec3(4.4, 7.5, 4.4) + vec3(uTime * 0.012, 0.0, uTime * 0.006);
-      float cloud = smoothstep(0.6, 0.9, fbm(cp)) * (0.75 - 0.35 * abs(vObj.y)) * uCloudA;
-      col *= 1.0 - smoothstep(0.6, 0.9, fbm(cp + vec3(0.04, -0.03, 0.0))) * 0.12 * uCloudA;
-      col = mix(col, vec3(1.0) * (max(ndl, 0.0) * 1.05 + 0.04) * sunCol, cloud * 0.5);
-
       float fres = pow(1.0 - max(dot(N, V), 0.0), 3.6);
       vec3 atm = mix(vec3(0.32, 0.58, 1.0), vec3(1.0, 0.68, 0.48), smoothstep(0.3, 1.0, dot(N, L)));
       col = mix(col, atm * (lit * 0.95 + 0.08), fres * 0.45);
-      col = mix(col, vec3(0.62, 0.72, 0.84), uHaze * 0.22);            // aerial perspective
+      col = mix(col, vec3(0.62, 0.72, 0.84), uHaze * 0.08);            // aerial perspective
 
-      // The tag's signal: a scroll-driven ping wave plus sonar pulses sized to the view.
-      vec2 dk = vec2((ll.x - uTarget.x) * cos(radians(uTarget.y)), ll.y - uTarget.y) * 111.2;
-      float dist = length(dk);
+      // Your location pings, slowly: a scroll-driven wave that travels out to the nearest water,
+      // plus ambient sonar pulses sized to the view.
+      float dist = kmTo(ll, uPin);
       float ring = exp(-pow((dist - uPing) / max(uAltKm * 0.006, 0.12), 2.0)) * uPingA * 0.75;
+      float reach = clamp(uAltKm * 0.3, 4.0, 1500.0);
       for (int k = 0; k < 3; k++) {
-        float f = fract(uTime * 0.32 + float(k) / 3.0);
-        float r = uAltKm * 0.34 * f;
-        ring += exp(-pow((dist - r) / max(uAltKm * 0.0032, 0.02), 2.0)) * (1.0 - f) * 0.75 * uPulse;
+        float f = fract(uTime * 0.1 + float(k) / 3.0);
+        ring += exp(-pow((dist - reach * f) / max(uAltKm * 0.0032, 0.02), 2.0)) * (1.0 - f) * (1.0 - f) * 0.8 * uPulse;
       }
       float core = exp(-pow(dist / max(uAltKm * 0.005, 0.02), 2.0)) * uPulse;
-      col += (ring + core * 1.4) * vec3(1.0, 0.48, 0.3) * 1.2;
+      // The water it found glows.
+      float wd = kmTo(ll, uTarget);
+      float found = exp(-pow(wd / max(uAltKm * 0.006, 0.03), 2.0)) * uFound;
+      found += exp(-pow((wd - uAltKm * 0.02 * (0.6 + 0.4 * sin(uTime * 1.2))) / max(uAltKm * 0.002, 0.01), 2.0)) * uFound * 0.6;
+      col += (ring + core * 1.4 + found * 1.2) * vec3(1.0, 0.48, 0.3) * 1.2;
 
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
@@ -278,13 +295,14 @@ for (const [a, b] of ROUTES) {
 const overlay = $('#overlay');
 const FISH_SVG = '<svg viewBox="0 0 46 14"><path d="M2 7c6-6 18-7 28-2l8-5-2 7 2 7-8-5C20 14 8 13 2 7z" fill="rgba(200,215,225,.9)"/></svg>';
 const PIN_SVG = '<svg viewBox="0 0 24 24"><path d="M12 22s7-6.3 7-12a7 7 0 1 0-14 0c0 5.7 7 12 7 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.6" fill="currentColor"/></svg>';
+const DROP_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
 const globeLabels = [
   { lat: 17, lon: -121, html: 'PACIFIC<br>OCEAN', cls: 'ocean-label', group: 'hero' },
   { lat: 31, lon: -62, html: 'ATLANTIC<br>OCEAN', cls: 'ocean-label', group: 'hero' },
   { lat: 24.5, lon: -90, html: 'GULF OF<br>MEXICO', cls: 'ocean-label', group: 'hero' },
   { lat: -10, lon: 75, html: 'INDIAN<br>OCEAN', cls: 'ocean-label', group: 'hero' },
-  { lat: PIN.lat, lon: PIN.lon, html: `<i></i><span>${PIN_SVG}College Station, TX</span>`, cls: 'pin', group: 'hero' },
-  { lat: TARGET.lat, lon: TARGET.lon, html: `<i class="ping"></i><span>${PIN_SVG}Tag ping · Lake Somerville</span>`, cls: 'pin target', group: 'signal' },
+  { id: 'you', lat: HOME.lat, lon: HOME.lon, html: `<i></i><span>${PIN_SVG}<em></em></span>`, cls: 'pin you', group: 'you' },
+  { id: 'water', lat: HOME.lat, lon: HOME.lon, html: `<i></i><span>${DROP_SVG}<em></em></span>`, cls: 'pin target', group: 'water' },
   { lat: 30, lon: -135, html: FISH_SVG, cls: 'fish', drift: 1, group: 'hero' },
   { lat: 2, lon: -118, html: FISH_SVG, cls: 'fish', drift: -1, group: 'hero' },
   { lat: 32, lon: -60, html: FISH_SVG, cls: 'fish', drift: 1, group: 'hero' },
@@ -296,13 +314,21 @@ const globeLabels = [
   overlay.appendChild(el);
   return { ...l, el, pos: latLon(l.lat, l.lon, 1.0) };
 });
+const label = (id) => globeLabels.find((l) => l.id === id);
+function moveLabel(id, lat, lon, text) {
+  const l = label(id);
+  l.lat = lat;
+  l.lon = lon;
+  l.pos = latLon(lat, lon, 1.0);
+  l.el.querySelector('em').textContent = text;
+}
 
 const tmpV = new THREE.Vector3(), tmpN = new THREE.Vector3(), camDir = new THREE.Vector3();
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 function updateGlobeLabels(t, alpha) {
   const W = innerWidth, H = innerHeight;
   for (const l of globeLabels) {
-    const a = alpha[l.group];
+    const a = alpha[l.group] || 0;
     if (a <= 0.001) {
       l.el.style.opacity = '0';
       continue;
@@ -331,32 +357,38 @@ const distFor = (r) => {
   const k = 1 / (2 * Math.tan((gCamera.fov * D2R) / 2) * r);
   return Math.sqrt(1 + k * k);
 };
+// Altitude that frames you and your water together at the end of the signal beat.
+const signalAltKm = () => clamp((loc.km * 3.5) / Math.min(1, innerWidth / innerHeight / 1.2), 40, 900);
+const ALT_END_KM = 9;
+const lerpLL = (a, b, t) => ({ lat: lerp(a.lat, b.lat, t), lon: lerp(a.lon, b.lon, t) });
 
 let ambientAngle = 0;
-const TARGET_SPIN = -(TARGET.lon + 90) * D2R;
-const TARGET_TILT = TARGET.lat * D2R;
-const ALT_END_KM = 9;
-const globeState = { altKm: 10000 };
+const globeState = { altKm: 10000, roll: 0 };
 
 function placeGlobe(dt, t) {
   const W = innerWidth, H = innerHeight;
   const hv = heroView();
-  const eSig = easeInOut(seg(R.signal));
+  // Turn to you first, then zoom in, so nothing is still rotating once the view is close.
+  const eSig = easeInOut(seg([0.05, 0.15]));
+  const eZoom = easeInOut(seg([0.08, R.signal[1]]));
   const eDesc = seg(R.descent);
+  const water = loc.water || loc.user;
+  const mid = lerpLL(loc.user, water, 0.5);
+  // Where the camera looks: you, then you and your water, then the water.
+  const focus = eDesc > 0 ? lerpLL(mid, water, easeInOut(seg([0.22, 0.36]))) : lerpLL(loc.user, mid, smooth(seg([0.12, 0.22])));
   // Ambient spin slows to a stop as the story takes over.
   ambientAngle += 0.045 * dt * (1 - eSig);
-  const goal = ambientAngle + Math.atan2(Math.sin(TARGET_SPIN - ambientAngle), Math.cos(TARGET_SPIN - ambientAngle));
+  const spinGoal = -(focus.lon + 90) * D2R;
+  const goal = ambientAngle + Math.atan2(Math.sin(spinGoal - ambientAngle), Math.cos(spinGoal - ambientAngle));
   spin.rotation.y = lerp(ambientAngle, goal, eSig);
-  tilt.rotation.x = lerp(0.1, TARGET_TILT, eSig);
+  tilt.rotation.x = lerp(0.1, focus.lat * D2R, eSig);
 
-  const dHero = distFor(hv.r), dSig = distFor(isSmall() ? 0.3 : 0.36);
-  let d = lerp(dHero, dSig, eSig);
-  if (eDesc > 0) {
-    const a0 = Math.log(dSig - 1), a1 = Math.log(ALT_END_KM / EARTH_KM);
-    d = 1 + Math.exp(lerp(a0, a1, easeInOut(eDesc)));
-  }
+  const dHero = distFor(hv.r), dSig = 1 + signalAltKm() / EARTH_KM;
+  let d = Math.exp(lerp(Math.log(dHero - 1), Math.log(dSig - 1), eZoom)) + 1;
+  if (eDesc > 0) d = 1 + Math.exp(lerp(Math.log(dSig - 1), Math.log(ALT_END_KM / EARTH_KM), easeInOut(eDesc)));
   const cx = lerp(hv.cx, 0.5, eSig), cy = lerp(hv.cy, 0.5, eSig);
   const roll = 0.5 * easeInOut(eDesc);          // a slow turn as we dive
+  globeState.roll = roll;
   gCamera.position.set(0, 0, d);
   gCamera.up.set(Math.sin(roll), Math.cos(roll), 0);
   gCamera.lookAt(0, 0, 0);
@@ -370,12 +402,12 @@ function placeGlobe(dt, t) {
   const u = earthMat.uniforms;
   u.uAltKm.value = altKm;
   u.uRegionMix.value = 1 - smooth(clamp((altKm - 300) / 600, 0, 1));
-  u.uLakeMix.value = 1 - smooth(clamp((altKm - 35) / 55, 0, 1));
+  u.uLakeMix.value = 1 - smooth(clamp((altKm - 30) / 50, 0, 1));
   u.uHaze.value = 1 - smooth(clamp((altKm - 20) / 2500, 0, 1));
-  u.uCloudA.value = smooth(clamp((altKm - 300) / 2000, 0, 1));
-  u.uPing.value = seg([0.1, 0.24]) * 1400;
-  u.uPingA.value = bell(0.1, 0.13, 0.2, 0.25);
-  u.uPulse.value = seg([0.1, 0.18]) * (1 - seg([0.44, 0.47]));
+  u.uPing.value = seg([0.09, 0.2]) * (loc.km * 1.25 + 3);
+  u.uPingA.value = bell(0.09, 0.11, 0.18, 0.22);
+  u.uPulse.value = 1 - seg([0.24, 0.32]);
+  u.uFound.value = seg([0.16, 0.2]) * (1 - seg([0.42, 0.46]));
   u.uTime.value = t;
   glowMat.uniforms.uFade.value = smooth(clamp((altKm - 800) / 3000, 0, 1));
 
@@ -387,182 +419,166 @@ function placeGlobe(dt, t) {
     s.visible = heroA > 0.01;
   }
   routeMat.opacity = 0.42 * heroA;
-  updateGlobeLabels(t, { hero: heroA, signal: bell(0.1, 0.15, 0.28, 0.33) });
+  updateGlobeLabels(t, { hero: heroA, you: 1 - seg([0.3, 0.36]), water: bell(0.17, 0.2, 0.36, 0.42) });
 }
 
 // ===========================================================================
-// Layer 2 — the lake surface, from 2.5 km up down to the water
+// Layer 2 — the water you dove into, from 9 km up down to the waterline
 // ===========================================================================
 
 const sScene = new THREE.Scene();
-const sCamera = new THREE.PerspectiveCamera(42, 1, 0.1, 40000);
+const sCamera = new THREE.PerspectiveCamera(30, 1, 0.05, 60000);
 const waterNormals = tex('assets/waternormals.jpg', false, true);
+// Sky, with the lake's wooded shore as a hazy treeline along the horizon (seen near the water).
 const SKY_GLSL = /* glsl */ `
-  vec3 skyColor(vec3 d) {
+  uniform float uShore;
+  ${NOISE}
+  vec3 skyColor(vec3 d, float shore) {
     float h = clamp(d.y, 0.0, 1.0);
-    vec3 c = mix(vec3(0.86, 0.9, 0.9), vec3(0.36, 0.58, 0.86), pow(h, 0.55));
+    vec3 c = mix(vec3(0.82, 0.9, 0.96), vec3(0.22, 0.5, 0.95), pow(h, 0.5));
     float sun = max(dot(normalize(d), normalize(vec3(0.35, 0.7, -0.6))), 0.0);
-    return c + vec3(1.0, 0.85, 0.6) * (pow(sun, 400.0) * 6.0 + pow(sun, 12.0) * 0.18);
+    c += vec3(1.0, 0.85, 0.6) * (pow(sun, 400.0) * 6.0 + pow(sun, 12.0) * 0.2);
+    if (shore > 0.0 && d.y < 0.06) {
+      float az = atan(d.z, d.x);
+      float top = 0.008 + 0.016 * vnoise(vec3(az * 9.0, 0.0, 0.0)) + 0.008 * vnoise(vec3(az * 55.0, 1.0, 0.0)) + 0.003 * vnoise(vec3(az * 260.0, 2.0, 0.0));
+      float tree = smoothstep(top + 0.0015, top - 0.0015, d.y) * shore;
+      vec3 leaves = mix(vec3(0.05, 0.085, 0.05), vec3(0.11, 0.15, 0.08), vnoise(vec3(az * 400.0, d.y * 900.0, 0.0)));
+      c = mix(c, mix(leaves, vec3(0.62, 0.72, 0.8), 0.42), tree);
+    }
+    return c;
   }`;
-const waterMat = new THREE.ShaderMaterial({
+const groundMat = new THREE.ShaderMaterial({
   uniforms: {
-    uNormals: { value: waterNormals }, uTime: { value: 0 }, uCam: { value: new THREE.Vector3() },
-    uRing: { value: 0 }, uRingA: { value: 0 }, uWave: { value: 1 }, uSonar: { value: 0 },
+    uNormals: { value: waterNormals }, uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uCamH: { value: 9000 },
+    uRing: { value: 0 }, uRingA: { value: 0 }, uWave: { value: 1 },
+    uRegion: SAT.region, uLakeSat: SAT.lake, uMask: SAT.mask, uRegionB: SAT.regionB, uLakeB: SAT.lakeB, uSatReady: SAT.ready,
+    uTarget: { value: new THREE.Vector2() }, uShore: { value: 0 },
   },
   vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D uNormals; uniform float uTime, uRing, uRingA, uWave, uSonar; uniform vec3 uCam;
+    uniform sampler2D uNormals, uRegion, uLakeSat, uMask;
+    uniform vec4 uRegionB, uLakeB; uniform vec2 uTarget;
+    uniform float uTime, uRing, uRingA, uWave, uCamH, uSatReady; uniform vec3 uCam;
     varying vec3 vW;
     ${SKY_GLSL}
     vec3 nrm(vec2 uv) { return texture2D(uNormals, uv).rbg * 2.0 - 1.0; }
+    float inside(vec2 q, float f) {
+      return smoothstep(0.0, f, q.x) * smoothstep(0.0, f, 1.0 - q.x) * smoothstep(0.0, f, q.y) * smoothstep(0.0, f, 1.0 - q.y);
+    }
     void main() {
-      vec2 xz = vW.xz;
+      vec2 xz = vW.xz;                   // metres from the dive point; +x east, -z north
+      vec2 ll = uTarget + vec2(xz.x / (${M_PER_DEG}.0 * cos(radians(uTarget.y))), -xz.y / ${M_PER_DEG}.0);
+      vec2 rq = (ll - uRegionB.xy) / (uRegionB.zw - uRegionB.xy);
+      vec2 lq = (ll - uLakeB.xy) / (uLakeB.zw - uLakeB.xy);
+      float inR = inside(rq, 0.04) * uSatReady, inL = inside(lq, 0.03);
+
+      // The same satellite picture the globe showed, lit the same way.
+      vec3 sat = vec3(0.07, 0.08, 0.05);
+      sat = mix(sat, texture2D(uRegion, rq).rgb, inR);
+      sat = mix(sat, texture2D(uLakeSat, lq).rgb, inL * uSatReady);
+      vec3 sunCol = vec3(1.0, 0.93, 0.84);
+      vec3 land = sat * 1.05 * sunCol;
+      float wet = texture2D(uMask, lq).r * inL;
+
+      // Live water, brighter and more detailed as the camera comes down.
       vec3 n = nrm(xz / 9.0 + uTime * vec2(0.012, 0.008)) + nrm(xz / 3.1 - uTime * vec2(0.01, 0.017))
              + nrm(xz / 47.0 + uTime * vec2(-0.004, 0.003)) * 1.4 + nrm(xz / 260.0 + uTime * 0.002) * 2.0;
       n = normalize(vec3(n.x, 4.2, n.z));
-      // The ping lands: rings travelling outward from the dive point (scroll-driven).
+      // The drop lands: rings travelling outward from the dive point (scroll-driven).
       float r = length(xz);
       float behind = uRing - r;
       if (behind > 0.0 && uRingA > 0.0) {
         float env = exp(-behind / (uRing * 0.35 + 0.5)) * uRingA;
-        float wave = sin(behind * 6.2831 / uWave);
-        n.xz += normalize(xz + 1e-4) * wave * env * 0.55;
+        n.xz += normalize(xz + 1e-4) * sin(behind * 6.2831 / uWave) * env * 0.55;
         n = normalize(n);
       }
       vec3 V = normalize(uCam - vW);
-      float fres = 0.05 + 0.95 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
+      float fres = 0.04 + 0.96 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
       float tint = texture2D(uNormals, xz / 900.0).r;
-      vec3 body = mix(vec3(0.04, 0.07, 0.055), vec3(0.08, 0.12, 0.09), tint);
-      vec3 col = mix(body, skyColor(reflect(-V, n)), fres);
-      float sonar = exp(-pow((r - uRing) / max(uWave * 0.16, 0.06), 2.0)) * uSonar;
-      col += vec3(1.0, 0.48, 0.3) * sonar * 0.9;
+      vec3 body = mix(vec3(0.03, 0.15, 0.2), vec3(0.06, 0.27, 0.3), tint);
+      vec3 live = mix(body, skyColor(reflect(-V, n), 0.0), fres);
+      vec3 Ls = normalize(vec3(0.35, 0.7, -0.6));
+      live += vec3(1.0, 0.86, 0.65) * pow(max(dot(reflect(-V, n), Ls), 0.0), 900.0) * 1.0;
+      float detail = 1.0 - smoothstep(250.0, 4500.0, uCamH);
+      vec3 waterCol = mix(land * 1.12 + vec3(0.0, 0.01, 0.015), live, detail);
+      vec3 col = mix(land, waterCol, wet);
+
+      // Haze: the globe's aerial perspective high up, distance haze near the water.
+      col = mix(col, vec3(0.62, 0.72, 0.84), 0.08 * smoothstep(400.0, 9000.0, uCamH));
       float dist = length(uCam - vW);
-      col = mix(col, vec3(0.78, 0.84, 0.86), 1.0 - exp(-dist / 7000.0));
+      col = mix(col, vec3(0.8, 0.88, 0.95), 1.0 - exp(-max(dist - uCamH * 1.05, 0.0) / 5000.0));
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
     }`,
 });
-const water = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), waterMat);
-water.rotation.x = -Math.PI / 2;
-sScene.add(water);
-const skyDome = new THREE.Mesh(new THREE.SphereGeometry(30000, 32, 16), new THREE.ShaderMaterial({
-  side: THREE.BackSide, depthWrite: false,
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(90000, 90000, 160, 160), groundMat);
+ground.rotation.x = -Math.PI / 2;
+sScene.add(ground);
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, uniforms: { uShore: groundMat.uniforms.uShore },
   vertexShader: `varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `${SKY_GLSL} varying vec3 vD; void main(){ gl_FragColor = vec4(skyColor(vD), 1.0); \n#include <colorspace_fragment>\n }`,
-}));
+  fragmentShader: `${SKY_GLSL} varying vec3 vD; void main(){ gl_FragColor = vec4(skyColor(vD, uShore), 1.0); \n#include <colorspace_fragment>\n }`,
+});
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(45000, 64, 32), skyMat);
 sScene.add(skyDome);
 
+const upG = new THREE.Vector3();
 function placeSurface(t) {
   const W = innerWidth, H = innerHeight;
-  const eS = easeOut(seg(R.surface));
+  const eS = easeInOut(seg(R.surface));
   const eT = easeInOut(seg(R.tilt));
-  const dist = Math.exp(lerp(Math.log(2600), Math.log(5.5), eS));
-  const pitch = lerp(89.4, 12, eT) * D2R;
-  sCamera.position.set(0, dist * Math.sin(pitch), dist * Math.cos(pitch));
-  sCamera.up.set(0, 1, 0);
+  const eL = easeInOut(seg(R.low));
+  // Straight down at first, matching the globe's last frame (same altitude, lens and turn).
+  const dist = p < R.surface[0] ? globeState.altKm * 1000 : Math.exp(lerp(Math.log(ALT_END_KM * 1000), Math.log(6), eS)) * lerp(1, 0.42, eL);
+  const pitch = (lerp(89.4, 10, eT) - 7 * eL) * D2R;
+  const roll = 0.5;
+  upG.set(Math.sin(roll), 0, -Math.cos(roll));            // the globe camera's "up" on the ground
+  sCamera.position.copy(upG).multiplyScalar(-dist * Math.cos(pitch));
+  sCamera.position.y = dist * Math.sin(pitch);
+  sCamera.up.set(0, Math.cos(pitch), 0).addScaledVector(upG, Math.sin(pitch));
   sCamera.lookAt(0, 0, 0);
-  sCamera.setViewOffset(W, H, 0, -0.17 * H * eT, W, H);
+  sCamera.fov = lerp(30, 46, eT);
+  sCamera.near = Math.max(0.02, sCamera.position.y * 0.2);
+  sCamera.setViewOffset(W, H, 0, -0.17 * H * eT * (1 - eL * 0.6), W, H);
   sCamera.updateProjectionMatrix();
-  const u = waterMat.uniforms;
+  const u = groundMat.uniforms;
   u.uTime.value = t;
   u.uCam.value.copy(sCamera.position);
-  // Ring sizes follow the camera height, so the ping reads the same at every altitude.
+  u.uCamH.value = sCamera.position.y;
+  u.uShore.value = 1 - smooth(clamp((sCamera.position.y - 20) / 200, 0, 1));
+  skyDome.position.copy(sCamera.position);
+  // Ring sizes follow the camera height, so the drop reads the same at every altitude.
   u.uRing.value = dist * 0.42 * (0.25 + seg([0.47, 0.63]));
   u.uWave.value = Math.max(0.22, dist * 0.035);
-  u.uRingA.value = bell(0.46, 0.48, 0.6, 0.66);
-  u.uSonar.value = (1 - seg([0.5, 0.58])) * seg([0.455, 0.47]);
+  u.uRingA.value = bell(0.47, 0.5, 0.62, 0.68);
 }
 
 // ===========================================================================
-// Layer 3 — the lake at eye level (photo, cut-out leaf, live ripples)
+// Layer 3 — beneath the surface: fish, and a hook that catches one now and then
 // ===========================================================================
 
-const IMG = { w: 1244, h: 700 };
-const RIPPLE = { x: 622, y: 470 };
-const pScene = new THREE.Scene();
-const flatCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-const photoMat = new THREE.ShaderMaterial({
-  uniforms: {
-    uPlate: { value: tex('assets/lake.jpg') }, uLeaf: { value: tex('assets/leaf.png') },
-    uRes: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uRing: { value: 0 }, uRingA: { value: 0 }, uZoom: { value: 1 },
-  },
-  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-  fragmentShader: /* glsl */ `
-    uniform sampler2D uPlate, uLeaf; uniform vec2 uRes; uniform float uTime, uRing, uRingA, uZoom;
-    varying vec2 vUv;
-    const vec2 IMG = vec2(${IMG.w}.0, ${IMG.h}.0);
-    const vec2 C = vec2(${RIPPLE.x}.0, ${RIPPLE.y}.0);
-    void main() {
-      // Cover-fit the photo, zooming gently toward the ripple as we sink to the water.
-      vec2 sp = vec2(vUv.x, 1.0 - vUv.y) * uRes;
-      float s = max(uRes.x / IMG.x, uRes.y / IMG.y) * uZoom;
-      vec2 off = (uRes - IMG * s) / 2.0 + (C - IMG / 2.0) * (s - s / uZoom) * -1.0;
-      vec2 p = (sp - off) / s;
-      // Water: shimmer plus the ping's ring and a slow ambient ring.
-      float w = smoothstep(290.0, 340.0, p.y);
-      float persp = 0.35 + (p.y - 300.0) / 400.0;
-      vec2 o = vec2(sin(p.y * 0.09 + uTime * 1.4) * 0.9, cos(p.x * 0.025 + uTime * 0.9) * 0.6) * persp;
-      vec2 d = p - C; d.y *= 3.4;
-      float dist = length(d);
-      vec2 dir = d / max(dist, 1.0); dir.y /= 3.4;
-      float light = 0.0;
-      for (int i = 0; i < 2; i++) {
-        float front = i == 0 ? uRing : mod(uTime * 60.0, 520.0);
-        float amp = i == 0 ? uRingA : 0.25 * (1.0 - mod(uTime * 60.0, 520.0) / 520.0);
-        float behind = front - dist;
-        if (behind > 0.0) {
-          float env = exp(-behind / 120.0) * smoothstep(0.0, 18.0, behind) * amp;
-          o += dir * sin(behind * 0.115) * env * 9.0 * persp;
-          light += cos(behind * 0.115) * env * 0.1;
-        }
-      }
-      vec3 c = texture2D(uPlate, vec2((p.x + o.x * w) / IMG.x, 1.0 - (p.y + o.y * w) / IMG.y)).rgb * (1.0 + light * w);
-      // Leaf with a gentle breeze (top stays attached).
-      float sway = 0.05 * sin(uTime * 1.3) + 0.03 * sin(uTime * 2.1 + 1.0);
-      float tt = clamp(p.y / 228.0, 0.0, 1.15);
-      vec2 q = p - vec2(-11.0, 36.0) * tt * tt * sway;
-      vec2 luv = (q - vec2(330.0, 0.0)) / vec2(370.0, 300.0);
-      if (luv.x >= 0.0 && luv.x <= 1.0 && luv.y >= 0.0 && luv.y <= 1.0) {
-        vec4 leaf = texture2D(uLeaf, vec2(luv.x, 1.0 - luv.y));
-        c = mix(c, leaf.rgb, leaf.a);
-      }
-      gl_FragColor = vec4(c, 1.0);
-      #include <colorspace_fragment>
-    }`,
-});
-pScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), photoMat));
-
-function placePhoto(t) {
-  const u = photoMat.uniforms;
-  u.uRes.value.set(RT.photo.width, RT.photo.height);
-  u.uTime.value = t;
-  u.uRing.value = seg([0.6, 0.78]) * 560;
-  u.uRingA.value = bell(0.6, 0.62, 0.74, 0.8);
-  u.uZoom.value = 1 + 0.14 * easeInOut(seg([0.62, 0.74]));
-}
-
-// ===========================================================================
-// Layer 4 — beneath the surface: tagged fish and their tracks
-// ===========================================================================
-
+// Palette shared with the Earth hero: deep navy, ocean blue, and the warm coral sun.
+const DEEP = new THREE.Color().setRGB(0.018, 0.085, 0.16);      // linear
 const uScene = new THREE.Scene();
 const uCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 80);
-const MURK = new THREE.Color().setRGB(0.05, 0.16, 0.14);       // linear
-uScene.fog = new THREE.FogExp2(MURK, 0.07);
-uScene.background = MURK.clone();
-uScene.add(new THREE.HemisphereLight(0xc8fff0, 0x10302a, 2.6));
-const sunUnder = new THREE.DirectionalLight(0xf0fff6, 2.6);
-sunUnder.position.set(2, 10, 3);
+uScene.fog = new THREE.FogExp2(DEEP, 0.06);
+uScene.background = DEEP.clone();
+uScene.add(new THREE.HemisphereLight(0xbfe4ff, 0x0b2440, 2.4));
+const sunUnder = new THREE.DirectionalLight(0xffe0c4, 2.8);
+sunUnder.position.set(4, 10, 2);
 uScene.add(sunUnder);
+const rim = new THREE.DirectionalLight(0xff9a70, 0.9);
+rim.position.set(-3, 2, -6);
+uScene.add(rim);
 
-// Gradient water column behind everything.
+// Gradient water column behind everything, with the sun's warm glow high up.
 uScene.add(new THREE.Mesh(new THREE.SphereGeometry(60, 32, 16), new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
   vertexShader: `varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `varying vec3 vD; void main(){ float h = vD.y;
-    vec3 murk = vec3(0.05, 0.16, 0.14);
-    vec3 c = mix(vec3(0.008, 0.035, 0.03), murk, smoothstep(-0.7, 0.0, h));
-    c = mix(c, vec3(0.2, 0.42, 0.36), smoothstep(0.0, 0.9, h));
+    vec3 c = mix(vec3(0.004, 0.018, 0.045), vec3(0.018, 0.085, 0.16), smoothstep(-0.7, 0.0, h));
+    c = mix(c, vec3(0.1, 0.36, 0.6), smoothstep(0.0, 0.9, h));
+    c += vec3(1.0, 0.55, 0.32) * pow(max(dot(vD, normalize(vec3(0.5, 0.8, -0.3))), 0.0), 6.0) * 0.35;
     gl_FragColor = vec4(c, 1.0);
     #include <colorspace_fragment>
   }`,
@@ -580,9 +596,11 @@ const underSurfMat = new THREE.ShaderMaterial({
       float l = pow(clamp((n.r + n.g) * 0.5 - 0.35, 0.0, 1.0), 1.6);
       vec3 V = normalize(vW - uCam);
       float window = smoothstep(0.35, 0.85, V.y);          // Snell's window overhead
+      float sun = pow(max(dot(V, normalize(vec3(0.5, 0.8, -0.3))), 0.0), 18.0);
       float d = length(vW - uCam);
-      vec3 c = mix(vec3(0.12, 0.3, 0.26), vec3(0.62, 0.86, 0.76), window) + l * 0.45 * (0.3 + window);
-      c = mix(vec3(0.05, 0.16, 0.14), c, exp(-d * 0.07));          // fade into the murk
+      vec3 c = mix(vec3(0.08, 0.3, 0.5), vec3(0.7, 0.9, 1.0), window) + l * 0.55 * (0.3 + window);
+      c += vec3(1.0, 0.7, 0.45) * sun * 0.9;
+      c = mix(vec3(0.018, 0.085, 0.16), c, exp(-d * 0.1));          // fade into the deep
       gl_FragColor = vec4(c, 1.0);
       #include <colorspace_fragment>
     }`,
@@ -613,13 +631,13 @@ const CAUSTIC = /* glsl */ `
 const bedMat = new THREE.ShaderMaterial({
   fog: true,
   uniforms: { ...THREE.UniformsLib.fog, uTime: { value: 0 } },
-  vertexShader: `varying vec3 vW; #include <fog_pars_vertex>
-    void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition; \n#include <fog_vertex>\n }`.replace('#include <fog_pars_vertex>', '\n#include <fog_pars_vertex>\n'),
+  vertexShader: `varying vec3 vW; \n#include <fog_pars_vertex>\n
+    void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition; \n#include <fog_vertex>\n }`,
   fragmentShader: `uniform float uTime; varying vec3 vW; ${NOISE} ${CAUSTIC} \n#include <fog_pars_fragment>\n
     void main(){
       float n = fbm(vec3(vW.xz * 0.35, 0.0));
-      vec3 c = mix(vec3(0.09, 0.1, 0.065), vec3(0.24, 0.23, 0.15), n);
-      c += caustic(vW.xz * 0.8, uTime) * vec3(0.5, 0.72, 0.58) * 0.32;
+      vec3 c = mix(vec3(0.07, 0.09, 0.1), vec3(0.3, 0.27, 0.2), n);
+      c += caustic(vW.xz * 0.8, uTime) * vec3(0.6, 0.85, 1.0) * 0.42;
       gl_FragColor = vec4(c, 1.0);
       \n#include <fog_fragment>\n
       \n#include <colorspace_fragment>\n
@@ -630,15 +648,16 @@ bed.rotation.x = -Math.PI / 2;
 bed.position.y = -5.5;
 uScene.add(bed);
 
-// Shafts of light from the surface.
+// Shafts of sunlight from the surface, warm at the top like the sunlit edge of the Earth.
 const rayMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
   uniforms: { uTime: { value: 0 } },
-  vertexShader: `varying vec2 vUv; varying float vSeed; void main(){ vUv = uv; vSeed = position.z; gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy, 0.0, 1.0); }`,
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `uniform float uTime; varying vec2 vUv;
     void main(){ float edge = pow(sin(vUv.x * 3.14159), 3.0); float fall = pow(vUv.y, 2.2);
       float flick = 0.7 + 0.3 * sin(uTime * 0.6 + vUv.x * 4.0 + vUv.y * 2.0);
-      gl_FragColor = vec4(vec3(0.55, 0.85, 0.75) * edge * fall * flick * 0.07, 1.0);
+      vec3 c = mix(vec3(0.5, 0.78, 1.0), vec3(1.0, 0.8, 0.6), smoothstep(0.6, 1.0, vUv.y));
+      gl_FragColor = vec4(c * edge * fall * flick * 0.09, 1.0);
       #include <colorspace_fragment>
     }`,
 });
@@ -668,44 +687,81 @@ const snowMat = new THREE.ShaderMaterial({
   vertexShader: `uniform float uTime, uPx; varying float vA;
     void main(){ vec3 p = position; p.x += sin(uTime * 0.21 + position.z) * 0.25; p.y += mod(uTime * 0.03 + position.x * 0.1, 1.0) * 0.4;
       vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_PointSize = uPx * 22.0 / -mv.z; vA = exp(mv.z * 0.09); gl_Position = projectionMatrix * mv; }`,
-  fragmentShader: `varying float vA; void main(){ float d = length(gl_PointCoord - 0.5); gl_FragColor = vec4(vec3(0.8, 0.92, 0.85), smoothstep(0.5, 0.0, d) * 0.45 * vA); }`,
+  fragmentShader: `varying float vA; void main(){ float d = length(gl_PointCoord - 0.5); gl_FragColor = vec4(vec3(0.82, 0.92, 1.0), smoothstep(0.5, 0.0, d) * 0.45 * vA); }`,
 });
 uScene.add(new THREE.Points(snowGeo, snowMat));
 
 // Fish: a photoscanned barramundi (CC0, Khronos glTF samples), swimming via a vertex bend.
-const FISH = [
-  // tagged fish (with ping rings, tracks and labels)
-  { tag: 'A-417', c: [0.3, -1.45, -0.6], a: 2.3, b: 1.2, w: 0.16, ph: 0.0, s: 1.9, chip: [18, -46] },
-  { tag: 'B-208', c: [-1.8, -2.1, -3.6], a: 3.0, b: 1.8, w: -0.13, ph: 2.1, s: 1.7, chip: [-190, 18] },
-  { tag: 'C-093', c: [2.3, -1.0, -4.8], a: 2.6, b: 1.6, w: 0.15, ph: 4.0, s: 1.6, chip: [18, -40] },
-  // the rest of the school
-  ...Array.from({ length: isSmall() ? 6 : 11 }, (_, i) => ({
-    c: [-6 + (i % 6) * 2.4, -1.2 - (i % 3) * 0.8, -7 - Math.floor(i / 6) * 3.5], a: 2 + (i % 4), b: 1.2 + (i % 3) * 0.5,
-    w: (i % 2 ? 1 : -1) * (0.12 + (i % 5) * 0.02), ph: i * 1.3, s: 1.2 + (i % 4) * 0.2,
-  })),
-];
+const FISH = Array.from({ length: isSmall() ? 9 : 14 }, (_, i) => (i < 3
+  ? [{ c: [-0.7, -1.45, -0.5], a: 2.1, b: 1.1, w: 0.16, ph: 0.0, s: 1.9 },
+    { c: [-1.8, -2.1, -3.6], a: 3.0, b: 1.8, w: -0.13, ph: 2.1, s: 1.7 },
+    { c: [2.0, -1.0, -5.2], a: 2.6, b: 1.5, w: 0.15, ph: 4.0, s: 1.6 }][i]
+  : { c: [-6 + (i % 6) * 2.4, -1.2 - (i % 3) * 0.8, -7 - Math.floor(i / 6) * 3.5], a: 2 + (i % 4), b: 1.2 + (i % 3) * 0.5,
+    w: (i % 2 ? 1 : -1) * (0.12 + (i % 5) * 0.02), ph: i * 1.3, s: 1.2 + (i % 4) * 0.2 }));
 const fishPath = (f, t, out) => {
   const a = f.w * t + f.ph;
   out.set(f.c[0] + f.a * Math.cos(a), f.c[1] + 0.25 * Math.sin(2 * a + f.ph), f.c[2] + f.b * Math.sin(a));
   return out;
 };
 const fishObjs = [];
-const pingTex = (() => {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const x = c.getContext('2d');
-  x.strokeStyle = 'rgba(255,150,110,1)';
-  x.lineWidth = 6;
-  x.beginPath();
-  x.arc(64, 64, 56, 0, Math.PI * 2);
-  x.stroke();
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-})();
-const TRAIL = 46;
-const tagLayer = document.createElement('div');
-overlay.appendChild(tagLayer);
+let fishLen = 0.5;
+
+function makeFish(base, len, s, phase) {
+  const mat = base.material.clone();
+  mat.envMapIntensity = 0;
+  mat.roughness = 0.5;
+  mat.color.multiplyScalar(1.3);
+  const uni = { uTime: { value: 0 }, uPhase: { value: phase }, uLen: { value: len }, uFreq: { value: 7 }, uWag: { value: 1 } };
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uni);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime, uPhase, uLen, uFreq, uWag; varying vec3 vCW;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float s = clamp(transformed.z / uLen + 0.5, 0.0, 1.0);      // 0 = head (-z), 1 = tail (+z)
+        float tail = pow(s, 1.7);
+        transformed.x += sin(uTime * uFreq + s * 5.0 + uPhase) * uLen * (0.025 + 0.11 * tail) * uWag;`)
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvCW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uTime; varying vec3 vCW;\n${CAUSTIC}`)
+      .replace('#include <opaque_fragment>', `outgoingLight += diffuseColor.rgb * caustic(vCW.xz * 1.4, uTime) * vec3(0.6, 0.85, 1.0) * 0.55;\n#include <opaque_fragment>`);
+  };
+  const mesh = new THREE.Mesh(base.geometry, mat);
+  mesh.rotation.y = Math.PI;      // the model's head points to -z; face the direction of travel (+z)
+  const holder = new THREE.Group();
+  holder.add(mesh);
+  holder.scale.setScalar(s);
+  uScene.add(holder);
+  return { holder, mesh, uni };
+}
+
+// The hook: a steel J-hook with a coral soft-plastic bait on a line from the surface.
+const hook = new THREE.Group();
+{
+  const steel = new THREE.MeshStandardMaterial({ color: 0xdfe6ee, metalness: 0.55, roughness: 0.28, emissive: 0x1b2633 });
+  const shape = new THREE.CatmullRomCurve3([
+    [0, 0.12], [0, 0.07], [0, 0.03], [0.006, 0.006], [0.025, -0.002], [0.044, 0.008], [0.05, 0.03], [0.048, 0.05],
+  ].map(([x, y]) => new THREE.Vector3(x - 0.025, y, 0)));
+  hook.add(new THREE.Mesh(new THREE.TubeGeometry(shape, 48, 0.0032, 8), steel));
+  const eye = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.0025, 8, 20), steel);
+  eye.position.set(-0.025, 0.128, 0);
+  eye.rotation.y = Math.PI / 2;
+  hook.add(eye);
+  const barb = new THREE.Mesh(new THREE.ConeGeometry(0.005, 0.016, 8), steel);
+  barb.position.set(0.0215, 0.05, 0);
+  barb.rotation.z = 0.5;
+  hook.add(barb);
+  const bait = new THREE.Mesh(new THREE.CapsuleGeometry(0.009, 0.05, 6, 12),
+    new THREE.MeshStandardMaterial({ color: 0xef9168, emissive: 0x6a2410, roughness: 0.45 }));
+  bait.position.set(-0.025, 0.07, 0);
+  hook.add(bait);
+}
+const lineMat = new THREE.MeshBasicMaterial({ color: 0xe8f4ff, transparent: true, opacity: 0.55, fog: false });
+const line = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 6, 1, true), lineMat);
+uScene.add(hook, line);
+let biter = null;
+const catchPop = document.createElement('div');
+catchPop.className = 'catch-pop';
+overlay.appendChild(catchPop);
 
 new GLTFLoader().load('assets/fish/fish.json', (gltf) => {
   let base = null;
@@ -715,67 +771,71 @@ new GLTFLoader().load('assets/fish/fish.json', (gltf) => {
   const bb = base.geometry.boundingBox;
   base.geometry.translate(0, -(bb.min.y + bb.max.y) / 2, -(bb.min.z + bb.max.z) / 2);
   const len = bb.max.z - bb.min.z;
-  for (const f of FISH) {
-    const mat = base.material.clone();
-    mat.envMapIntensity = 0;
-    mat.roughness = 0.62;
-    mat.color.multiplyScalar(1.25);
-    const uni = { uTime: { value: 0 }, uPhase: { value: f.ph * 3 }, uLen: { value: len } };
-    mat.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, uni);
-      sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime, uPhase, uLen; varying vec3 vCW;')
-        .replace('#include <begin_vertex>', `#include <begin_vertex>
-          float s = clamp(transformed.z / uLen + 0.5, 0.0, 1.0);      // 0 = head (-z), 1 = tail (+z)
-          float tail = pow(s, 1.7);
-          transformed.x += sin(uTime * 7.0 + s * 5.0 + uPhase) * uLen * (0.025 + 0.11 * tail);`)
-        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvCW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', `#include <common>\nuniform float uTime; varying vec3 vCW;\n${CAUSTIC}`)
-        .replace('#include <opaque_fragment>', `outgoingLight += diffuseColor.rgb * caustic(vCW.xz * 1.4, uTime) * vec3(0.5, 0.75, 0.62) * 0.55;\n#include <opaque_fragment>`);
-    };
-    const mesh = new THREE.Mesh(base.geometry, mat);
-    mesh.rotation.y = Math.PI;      // the model's head points to -z; face the direction of travel
-    const holder = new THREE.Group();
-    holder.add(mesh);
-    holder.scale.setScalar(f.s);
-    uScene.add(holder);
-    const obj = { f, holder, mesh, uni, pos: new THREE.Vector3(), next: new THREE.Vector3() };
-    if (f.tag) {
-      const tag = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.07, 10), new THREE.MeshStandardMaterial({ color: 0xff7a45, emissive: 0x662010 }));
-      tag.rotation.x = Math.PI / 2;
-      tag.position.set(0, (bb.max.y - bb.min.y) * 0.42, -len * 0.05);
-      mesh.add(tag);
-      obj.tagMesh = tag;
-      obj.rings = [0, 1, 2].map(() => {
-        const r = new THREE.Sprite(new THREE.SpriteMaterial({ map: pingTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-        uScene.add(r);
-        return r;
-      });
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL * 3), 3));
-      const fade = new Float32Array(TRAIL);
-      for (let i = 0; i < TRAIL; i++) fade[i] = 1 - i / TRAIL;
-      g.setAttribute('fade', new THREE.BufferAttribute(fade, 1));
-      obj.trail = new THREE.Points(g, new THREE.ShaderMaterial({
-        transparent: true, depthWrite: false, fog: false,
-        uniforms: { uPx: { value: 1 }, uReveal: { value: 0 } },
-        vertexShader: `attribute float fade; uniform float uPx, uReveal; varying float vA;
-          void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); float on = step(1.0 - uReveal, fade);
-            gl_PointSize = uPx * (10.0 + 18.0 * fade) / -mv.z * on; vA = fade * on * exp(mv.z * 0.07); gl_Position = projectionMatrix * mv; }`,
-        fragmentShader: `varying float vA; void main(){ float d = length(gl_PointCoord - 0.5); gl_FragColor = vec4(1.0, 0.55, 0.38, smoothstep(0.5, 0.15, d) * vA); }`,
-      }));
-      uScene.add(obj.trail);
-      obj.chip = document.createElement('div');
-      obj.chip.className = 'tag-chip';
-      obj.chip.innerHTML = `<i></i><b>TAG ${f.tag}</b><span></span>`;
-      tagLayer.appendChild(obj.chip);
-    }
-    fishObjs.push(obj);
-  }
+  for (const f of FISH) fishObjs.push({ f, ...makeFish(base, len, f.s, f.ph * 3), pos: new THREE.Vector3(), next: new THREE.Vector3() });
+  biter = makeFish(base, len, 1.7, 1.0);
+  biter.half = (len / 2) * 1.7 * 0.92;
+  fishLen = len * 1.7;
+  hook.scale.setScalar((fishLen * 0.28) / 0.13);
 });
 
-const tagWorld = new THREE.Vector3();
+// One catch every CATCH_T seconds (ambient): the hook drops, a fish takes it, and it's reeled out.
+const CATCH_T = 18;
+const hookAt = new THREE.Vector3(), mouth = new THREE.Vector3(), headDir = new THREE.Vector3(), tmpA = new THREE.Vector3();
+const bez = (a, b, c, t, out) => out.copy(a).multiplyScalar((1 - t) * (1 - t)).addScaledVector(b, 2 * (1 - t) * t).addScaledVector(c, t * t);
+const S0 = new THREE.Vector3(), C0 = new THREE.Vector3();
+function placeHook(t, W, H, showPop) {
+  const k = ((t % CATCH_T) + CATCH_T) % CATCH_T;
+  const halfW = Math.tan(27.5 * D2R) * 5 * uCamera.aspect;
+  const home = new THREE.Vector3(Math.min(3.4, halfW * 0.72), -1.7, -1.6);
+  // Hook height through the cycle.
+  let y = home.y + 0.03 * Math.sin(t * 1.7);
+  if (k < 2.5) y = lerp(0.4, home.y, easeOut(k / 2.5));
+  else if (k > 7.5 && k < 8.1) y += 0.05 * Math.sin((k - 7.5) * 30);
+  else if (k >= 8.1) y = lerp(home.y, 0.9, Math.pow(clamp((k - 8.1) / 3.2, 0, 1), 1.6));
+  const sway = k >= 8.1 ? Math.sin(t * 9) * 0.06 * clamp((k - 8.1) * 2, 0, 1) : Math.sin(t * 0.8) * 0.02;
+  hookAt.set(home.x + sway, y, home.z);
+  hook.position.copy(hookAt);
+  hook.rotation.set(0, -0.6 + Math.sin(t * 0.7) * 0.25, sway * 2);
+  hook.visible = k < 11.6;
+  // The line, from the hook's eye up through the surface.
+  const top = hookAt.y + fishLen * 0.27;
+  line.position.set(hookAt.x, (top + 1.2) / 2, hookAt.z);
+  line.scale.set(0.0035, 1.2 - top, 0.0035);
+  line.visible = hook.visible && top < 1.2;
+  if (!biter) return;
+  // The fish: swims in, bites, is reeled out head-first, thrashing.
+  biter.holder.visible = k > 2.5 && k < 11.6;
+  biter.uni.uTime.value = t;
+  biter.uni.uFreq.value = k >= 7.5 ? 17 : 7;
+  biter.uni.uWag.value = k >= 7.5 ? 1.7 : 1;
+  mouth.copy(hookAt);
+  if (k < 7.5) {
+    S0.set(home.x - 3.4, home.y - 0.5, home.z - 3.6);
+    C0.set(home.x - 0.4, home.y - 0.6, home.z - 2.4);
+    const u = easeInOut(clamp((k - 2.5) / 5, 0, 1));
+    bez(S0, C0, hookAt, u, tmpA);
+    bez(S0, C0, hookAt, Math.min(1, u + 0.02), headDir);
+    headDir.sub(tmpA).normalize();
+    if (u > 0.98) headDir.set(0.35, 0.15, 0.93).normalize();
+    biter.holder.position.copy(tmpA).addScaledVector(headDir, -biter.half);
+  } else {
+    headDir.set(Math.sin(t * 8) * 0.35, k < 8.1 ? 0.2 : 1, k < 8.1 ? 0.95 : 0.25).normalize();
+    biter.holder.position.copy(mouth).addScaledVector(headDir, -biter.half);
+  }
+  biter.holder.lookAt(tmpA.copy(biter.holder.position).add(headDir));
+  // "+points" as the catch breaks the surface.
+  const list = fishFor(loc.water || {});
+  const fish = FISH_INFO[list[Math.floor(t / CATCH_T) % Math.max(1, list.length)]];
+  const pop = showPop && fish ? clamp((k - 9.6) / 0.4, 0, 1) * (1 - clamp((k - 12.6) / 0.6, 0, 1)) : 0;
+  if (pop > 0) {
+    tmpA.set(hookAt.x, 0, hookAt.z).project(uCamera);
+    const x = (tmpA.x * 0.5 + 0.5) * W, yy = (-tmpA.y * 0.5 + 0.5) * H;
+    catchPop.innerHTML = `<b>+${fish.points} pts</b><span>${fish.name}</span>`;
+    catchPop.style.transform = `translate(${x.toFixed(1)}px, ${Math.max(70, yy - 10 - 26 * pop).toFixed(1)}px) translate(-50%, -100%)`;
+  }
+  catchPop.style.opacity = pop.toFixed(3);
+}
+
 function placeUnder(t, waterY) {
   const W = innerWidth, H = innerHeight;
   const eU = easeInOut(seg(R.under));
@@ -790,43 +850,14 @@ function placeUnder(t, waterY) {
   snowMat.uniforms.uTime.value = t;
   snowMat.uniforms.uPx.value = RT.under.height / 900;
   for (const r of rays) r.position.x += Math.sin(t * 0.3 + r.userData.sway) * 0.0015;
-
-  const reveal = clamp(seg([0.7, 0.86]), 0, 1);
-  const chipsOn = waterY < 0.96 ? 1 - seg([0.92, 0.97]) : 0;
   for (const o of fishObjs) {
-    const { f } = o;
-    fishPath(f, t, o.pos);
-    fishPath(f, t + 0.05, o.next);
+    fishPath(o.f, t, o.pos);
+    fishPath(o.f, t + 0.05, o.next);
     o.holder.position.copy(o.pos);
     o.holder.lookAt(o.next);
     o.uni.uTime.value = t;
-    if (!o.tagMesh) continue;
-    o.tagMesh.getWorldPosition(tagWorld);
-    o.rings.forEach((r, i) => {
-      const k = (t * 0.45 + i / 3) % 1;
-      r.position.copy(tagWorld);
-      r.scale.setScalar(0.05 + k * 0.9);
-      r.material.opacity = (1 - k) * 0.85 * reveal;
-    });
-    const arr = o.trail.geometry.attributes.position.array;
-    for (let i = 0; i < TRAIL; i++) {
-      fishPath(f, t - i * 0.32, tmpV);
-      arr[i * 3] = tmpV.x;
-      arr[i * 3 + 1] = tmpV.y + 0.12 * f.s;
-      arr[i * 3 + 2] = tmpV.z;
-    }
-    o.trail.geometry.attributes.position.needsUpdate = true;
-    o.trail.material.uniforms.uReveal.value = reveal;
-    o.trail.material.uniforms.uPx.value = RT.under.height / 900;
-    // Label chip, only where the underwater view is on screen.
-    tmpV.copy(tagWorld).project(uCamera);
-    const x = (tmpV.x * 0.5 + 0.5) * W, y = (-tmpV.y * 0.5 + 0.5) * H;
-    const depth = (-o.pos.y).toFixed(1);
-    const vis = tmpV.z < 1 && y > waterY * H + 20 && x > 0 && x < W ? reveal * chipsOn : 0;
-    o.chip.style.opacity = vis.toFixed(3);
-    o.chip.style.transform = `translate(${(x + f.chip[0]).toFixed(1)}px, ${(y + f.chip[1]).toFixed(1)}px)`;
-    o.chip.lastChild.textContent = `${depth} m · ping ${Math.floor((t * 0.45) % 1 * 4) + 1}s ago`;
   }
+  placeHook(t, W, H, waterY < 0.2 && p < R.board[0]);
 }
 
 // ===========================================================================
@@ -835,18 +866,17 @@ function placeUnder(t, waterY) {
 
 const compMat = new THREE.ShaderMaterial({
   uniforms: {
-    tGlobe: { value: RT.globe.texture }, tSurface: { value: RT.surface.texture }, tPhoto: { value: RT.photo.texture }, tUnder: { value: RT.under.texture },
+    tGlobe: { value: RT.globe.texture }, tSurface: { value: RT.surface.texture }, tUnder: { value: RT.under.texture },
     tStars: { value: tex('assets/stars.jpg') },
-    wSurface: { value: 0 }, wPhoto: { value: 0 }, uUnder: { value: 0 }, uWaterY: { value: 2 },
-    uCloud: { value: 0 }, uCloudZoom: { value: 1 }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uSkyDay: { value: 0 },
+    wSurface: { value: 0 }, uUnder: { value: 0 }, uWaterY: { value: 2 },
+    uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uSkyDay: { value: 0 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tGlobe, tSurface, tPhoto, tUnder, tStars;
-    uniform float wSurface, wPhoto, uUnder, uWaterY, uCloud, uCloudZoom, uTime, uSkyDay;
+    uniform sampler2D tGlobe, tSurface, tUnder, tStars;
+    uniform float wSurface, uUnder, uWaterY, uTime, uSkyDay;
     uniform vec2 uRes;
     varying vec2 vUv;
-    ${NOISE}
     vec3 sky(vec2 uv) {
       vec3 c = mix(vec3(0.006, 0.016, 0.03), vec3(0.018, 0.045, 0.08), smoothstep(0.0, 1.0, uv.y * 0.7 + (1.0 - uv.x) * 0.3));
       float g = exp(-pow(length((uv - vec2(1.0, 1.0)) * vec2(1.3, 1.0)) / 0.5, 2.0));
@@ -859,7 +889,6 @@ const compMat = new THREE.ShaderMaterial({
       vec4 g = texture2D(tGlobe, uv);
       vec3 col = g.rgb + sky(uv) * (1.0 - clamp(g.a, 0.0, 1.0));
       if (wSurface > 0.0) col = mix(col, texture2D(tSurface, uv).rgb, wSurface);
-      if (wPhoto > 0.0) col = mix(col, texture2D(tPhoto, uv).rgb, wPhoto);
 
       // The waterline: a half-submerged lens.
       if (uUnder > 0.0) {
@@ -871,16 +900,7 @@ const compMat = new THREE.ShaderMaterial({
           col *= 1.0 - 0.25 * exp(-(ys - wl) * uRes.y / 60.0);
         }
         float m = exp(-pow((ys - wl) * uRes.y / 2.4, 2.0));
-        col += m * vec3(0.75, 0.95, 0.9) * 0.55;
-      }
-
-      // Flying through the cloud deck.
-      if (uCloud > 0.0) {
-        vec2 c = (uv - 0.5) * vec2(uRes.x / uRes.y, 1.0) * uCloudZoom;
-        float n = fbm(vec3(c * 1.6, uTime * 0.03)) * 0.65 + fbm(vec3(c * 4.3 + 7.0, uTime * 0.05)) * 0.35;
-        float cover = smoothstep(0.62 - uCloud * 0.75, 0.82 - uCloud * 0.6, n);
-        vec3 cc = mix(vec3(0.72, 0.77, 0.83), vec3(1.0), smoothstep(0.35, 0.8, n));
-        col = mix(col, cc, cover * clamp(uCloud * 1.6, 0.0, 1.0));
+        col += m * vec3(0.8, 0.95, 1.0) * 0.55;
       }
       float v = smoothstep(1.25, 0.35, length((uv - 0.5) * vec2(uRes.x / uRes.y, 1.0)));
       col *= mix(0.82, 1.0, v);
@@ -891,45 +911,215 @@ const compMat = new THREE.ShaderMaterial({
 });
 const compScene = new THREE.Scene();
 compScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compMat));
+const flatCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 // ===========================================================================
-// DOM: hero, captions, leaderboard
+// Choosing the water: imagery, mask and labels
+// ===========================================================================
+
+let satToken = 0;
+const lakeBoundsFor = (w) => {
+  const dLon = 4500 / (M_PER_DEG * Math.cos(w.lat * D2R)), dLat = 4500 / M_PER_DEG;
+  return [w.lon - dLon, w.lat - dLat, w.lon + dLon, w.lat + dLat];
+};
+function regionBoundsFor(user, w) {
+  const c = lerpLL(user, w, 0.5);
+  const half = clamp(Math.max(Math.abs(user.lat - w.lat), Math.abs(user.lon - w.lon) * Math.cos(c.lat * D2R)) * 0.9 + 0.12, 0.3, 2.4);
+  const hLon = half / Math.cos(c.lat * D2R);
+  return [c.lon - hLon, c.lat - half, c.lon + hLon, c.lat + half];
+}
+// Water mask for imagery fetched at runtime: the lake's outline (OpenStreetMap) when known,
+// else open water around the dive point.
+function maskCanvas(b, shape, w) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 1024;
+  const x = c.getContext('2d');
+  x.fillStyle = '#000';
+  x.fillRect(0, 0, 1024, 1024);
+  const px = ([lon, lat]) => [((lon - b[0]) / (b[2] - b[0])) * 1024, ((b[3] - lat) / (b[3] - b[1])) * 1024];
+  if (shape && shape.outer && shape.outer.length) {
+    x.beginPath();
+    for (const ring of [...shape.outer, ...(shape.inner || [])]) ring.forEach((pt, i) => x[i ? 'lineTo' : 'moveTo'](...px(pt)));
+    x.fillStyle = '#fff';
+    x.fill('evenodd');
+  } else {
+    const [cx, cy] = px([w.lon, w.lat]);
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, 160);
+    g.addColorStop(0, '#fff');
+    g.addColorStop(0.45, '#fff');
+    g.addColorStop(1, '#000');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 1024, 1024);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+async function setWater(w) {
+  const token = ++satToken;
+  loc.water = w;
+  loc.km = Math.max(0.5, kmBetween(loc.user, w));
+  earthMat.uniforms.uTarget.value.set(w.lon, w.lat);
+  groundMat.uniforms.uTarget.value.set(w.lon, w.lat);
+  moveLabel('water', w.lat, w.lon, `${w.name} · ${fmtKm(loc.km)}`);
+  renderSpots();
+  SAT.ready.value = 0;
+  let shape = null;
+  if (!w.sat && w.osm) {
+    try {
+      shape = await fetchJSON(`/api/water/shape?osm=${encodeURIComponent(w.osm)}`);
+      if (token !== satToken) return;
+      if (shape.target) {
+        w.lat = shape.target[1];
+        w.lon = shape.target[0];
+        earthMat.uniforms.uTarget.value.set(w.lon, w.lat);
+        groundMat.uniforms.uTarget.value.set(w.lon, w.lat);
+        moveLabel('water', w.lat, w.lon, `${w.name} · ${fmtKm(loc.km)}`);
+      }
+    } catch { /* outline unavailable: fall back to open water around the point */ }
+  }
+  const rb = w.sat ? w.sat.regionB : regionBoundsFor(loc.user, w);
+  const lb = w.sat ? w.sat.lakeB : lakeBoundsFor(w);
+  const rh = clamp(Math.round((2048 * (rb[3] - rb[1])) / ((rb[2] - rb[0]) * Math.cos(w.lat * D2R))), 512, 2048);
+  try {
+    const [region, lake, mask] = await Promise.all(w.sat
+      ? [loadTex(w.sat.region), loadTex(w.sat.lake), loadTex(w.sat.mask, false)]
+      : [loadTex(`/api/sat?bbox=${rb.join(',')}&w=2048&h=${rh}`), loadTex(`/api/sat?bbox=${lb.join(',')}&w=1024&h=1024`), Promise.resolve(maskCanvas(lb, shape, w))]);
+    if (token !== satToken) return;
+    for (const [k, t] of [['region', region], ['lake', lake], ['mask', mask]]) {
+      if (SAT[k].value !== blank) SAT[k].value.dispose();
+      SAT[k].value = t;
+    }
+    SAT.regionB.value.set(...rb);
+    SAT.lakeB.value.set(...lb);
+    SAT.ready.value = 1;
+  } catch {
+    // No imagery reachable: the globe keeps Blue Marble, and the lake is all live water.
+    if (token !== satToken) return;
+    if (SAT.mask.value !== blank) SAT.mask.value.dispose();
+    SAT.mask.value = maskCanvas(lb, shape, w);
+    SAT.lakeB.value.set(...lb);
+  }
+}
+
+function setUser(user) {
+  loc.user = user;
+  earthMat.uniforms.uPin.value.set(user.lon, user.lat);
+  moveLabel('you', user.lat, user.lon, `You · ${user.name}`);
+}
+
+// ===========================================================================
+// "Find your location" and spots to fish around you
+// ===========================================================================
+
+const fetchJSON = async (url) => {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+};
+const fmtKm = (km) => (km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const spotsList = $('#spots-list');
+const spotsWhere = $('#spots-where');
+const locateBtn = $('#locate');
+
+function curatedNear(user) {
+  return (window.TIDECAST_WATERS || []).map((w) => ({ ...w, km: kmBetween(user, w) })).sort((a, b) => a.km - b.km);
+}
+
+function renderSpots() {
+  spotsList.innerHTML = loc.waters.slice(0, isSmall() ? 2 : 3).map((w, i) => {
+    const fish = fishFor(w).slice(0, isSmall() ? 2 : 3).map((id) => FISH_INFO[id]);
+    return `<li><button type="button" data-i="${i}" aria-pressed="${w === loc.water}">
+      <span class="spot-head"><strong>${esc(w.name)}</strong><em>${fmtKm(w.km)}</em></span>
+      <span class="spot-kind">${esc(w.kind || 'Water')}</span>
+      <span class="spot-fish">${fish.map((f) => `<i>${esc(f.name)} <b>${f.points}</b></i>`).join('')}</span>
+    </button></li>`;
+  }).join('');
+}
+spotsList.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-i]');
+  if (b) setWater(loc.waters[+b.dataset.i]);
+});
+
+async function findWaters(user) {
+  try {
+    const { waters } = await fetchJSON(`/api/water?lat=${user.lat.toFixed(4)}&lon=${user.lon.toFixed(4)}`);
+    if (waters && waters.length) return waters.map((w) => ({ ...w, km: kmBetween(user, w) }));
+  } catch { /* offline or blocked: use the built-in list */ }
+  return curatedNear(user);
+}
+
+async function useLocation(user, known = false) {
+  setUser(user);
+  spotsWhere.innerHTML = `Finding water near <b>${esc(user.name)}</b>…`;
+  // The default location uses the built-in list, so the opening dive is always the same;
+  // a real location asks OpenStreetMap for every named water around it.
+  const waters = known ? await findWaters(user) : curatedNear(user);
+  // The baked imagery of a built-in water is better than a runtime fetch of the same place.
+  const curated = window.TIDECAST_WATERS || [];
+  loc.waters = waters.map((w) => curated.find((c) => c.sat && kmBetween(c, w) < 2.5) ? { ...curated.find((c) => c.sat && kmBetween(c, w) < 2.5), km: w.km } : w);
+  spotsWhere.innerHTML = `Spots near <b>${esc(user.name)}</b>${known ? '' : ' <span>(default)</span>'}`;
+  await setWater(loc.waters[0]);
+}
+
+function locate() {
+  if (!navigator.geolocation) {
+    spotsWhere.textContent = 'This browser can’t share a location.';
+    return;
+  }
+  locateBtn.disabled = true;
+  locateBtn.classList.add('busy');
+  spotsWhere.textContent = 'Finding your location…';
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const user = { lat: pos.coords.latitude, lon: pos.coords.longitude, name: 'your location' };
+    try {
+      const r = await fetchJSON(`/api/reverse?lat=${user.lat.toFixed(4)}&lon=${user.lon.toFixed(4)}`);
+      if (r.name) user.name = r.name;
+    } catch { /* keep the generic name */ }
+    await useLocation(user, true);
+    locateBtn.disabled = false;
+    locateBtn.classList.remove('busy');
+  }, () => {
+    spotsWhere.innerHTML = `Location unavailable — showing spots near <b>${esc(HOME.name)}</b>`;
+    locateBtn.disabled = false;
+    locateBtn.classList.remove('busy');
+  }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 });
+}
+locateBtn.onclick = locate;
+
+// ===========================================================================
+// DOM: hero, spots panel, leaderboard
 // ===========================================================================
 
 const hero = $('#hero');
 const hint = $('#scroll-hint');
 const board = $('#board');
-const underlay = $('#underlay');
-const captions = [...document.querySelectorAll('#captions p')];
-const CAPTION_RANGES = { signal: [0.08, 0.11, 0.2, 0.24], descent: [0.25, 0.28, 0.37, 0.41], surface: [0.52, 0.55, 0.63, 0.67], under: [0.74, 0.77, 0.84, 0.87] };
+const spotsPanel = $('#spots');
 const chapterBtns = [...document.querySelectorAll('#chapters button')];
 
-function placeDom(waterY) {
+function placeDom() {
   const H = innerHeight;
   const hOut = seg(R.heroOut);
   hero.style.opacity = (1 - hOut).toFixed(3);
   hero.style.transform = `translateY(${(-60 * hOut).toFixed(1)}px)`;
   hero.style.visibility = hOut >= 1 ? 'hidden' : 'visible';
   hint.style.opacity = (1 - seg([0, 0.02])).toFixed(3);
-  for (const c of captions) {
-    const r = CAPTION_RANGES[c.dataset.cap];
-    const a = bell(...r);
-    c.style.opacity = a.toFixed(3);
-    c.style.transform = `translateY(${((1 - a) * 14).toFixed(1)}px)`;
-  }
-  // Leaderboard: rises from deep below, breaks the surface, settles exactly at the end.
+  const sp = bell(0.03, 0.07, 0.84, 0.87);
+  spotsPanel.style.opacity = sp.toFixed(3);
+  spotsPanel.style.transform = `translateY(${((1 - sp) * 16).toFixed(1)}px)`;
+  spotsPanel.style.visibility = sp > 0.01 ? 'visible' : 'hidden';
+  // Leaderboard: rises up through the water and settles in front of the fish at the end.
   const eB = seg(R.board);
   board.style.visibility = eB > 0 ? 'visible' : 'hidden';
   board.style.transform = `translate(-50%, calc(-46% + ${((1 - easeOut(eB)) * 1.15 * H).toFixed(1)}px))`;
   board.inert = eB < 0.98;
-  underlay.style.top = `${(clamp(waterY, -0.1, 1.2) * 100).toFixed(2)}%`;
-  underlay.style.display = waterY < 1.01 && eB > 0 ? 'block' : 'none';
   document.body.classList.toggle('in-water', p > 0.5);
   const nearest = chapterBtns.reduce((best, b) => (Math.abs(+b.dataset.to - p) < Math.abs(+best.dataset.to - p) ? b : best), chapterBtns[0]);
   chapterBtns.forEach((b) => b.classList.toggle('on', b === nearest));
 }
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const allRows = () => (window.TIDECAST_LEADERBOARD || []).slice().sort((a, b) => (b.points || 0) - (a.points || 0));
 const rowsFor = (period) => allRows().filter((r) => period === 'all' || (r.period || 'week') === 'week');
 const initials = (n) => String(n || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -954,15 +1144,10 @@ function renderBoard(period = 'week') {
 // Frame loop
 // ===========================================================================
 
-// Where the waterline sits on screen (fraction from the top; > 1 = not visible).
+// Where the waterline sits on screen (fraction from the top; > 1 = not visible, < 0 = all under).
 function waterline() {
   if (p < 0.645) return 2;
-  if (p < 0.72) {
-    const a = seg([0.645, 0.69]), b = seg([0.7, 0.76]);
-    return lerp(lerp(1.08, 0.5, easeInOut(a)), -0.08, easeInOut(b));
-  }
-  if (p < R.board[0] + 0.03) return lerp(0.5, -0.08, easeInOut(seg([0.7, 0.76])));
-  return lerp(-0.08, 1.12, easeInOut(seg([0.89, 1.0])));
+  return lerp(lerp(1.08, 0.5, easeInOut(seg([0.645, 0.69]))), -0.08, easeInOut(seg([0.7, 0.76])));
 }
 
 function resize() {
@@ -985,12 +1170,11 @@ function frame(now) {
   p += (pTarget - p) * (1 - Math.exp(-dt * 14));
   if (Math.abs(pTarget - p) < 1e-5) p = pTarget;
 
-  const wSurface = seg([0.455, 0.475]);
-  const wPhoto = seg(R.toPhoto);
-  const globeOn = wSurface < 1;
-  const surfaceOn = wSurface > 0 && wPhoto < 1;
+  const wSurface = seg([0.455, 0.47]);
   const waterY = waterline();
+  const globeOn = wSurface < 1;
   const underOn = waterY < 1.02;
+  const surfaceOn = wSurface > 0 && waterY > -0.04;
 
   if (globeOn) {
     placeGlobe(dt, clock);
@@ -999,39 +1183,31 @@ function frame(now) {
     renderer.clear();
     renderer.render(gScene, gCamera);
   } else {
-    updateGlobeLabels(clock, { hero: 0, signal: 0 });
+    updateGlobeLabels(clock, {});
   }
   if (surfaceOn) {
     placeSurface(clock);
     renderer.setRenderTarget(RT.surface);
     renderer.render(sScene, sCamera);
   }
-  if (wPhoto > 0) {
-    placePhoto(clock);
-    renderer.setRenderTarget(RT.photo);
-    renderer.render(pScene, flatCam);
-  }
   if (underOn) {
     placeUnder(clock, waterY);
     renderer.setRenderTarget(RT.under);
     renderer.render(uScene, uCamera);
   } else {
-    for (const o of fishObjs) if (o.chip) o.chip.style.opacity = '0';
+    catchPop.style.opacity = '0';
   }
 
   const cu = compMat.uniforms;
   cu.wSurface.value = wSurface;
-  cu.wPhoto.value = wPhoto;
   cu.uUnder.value = underOn ? 1 : 0;
   cu.uWaterY.value = waterY;
-  cu.uCloud.value = bell(0.405, 0.46, 0.468, 0.5);
-  cu.uCloudZoom.value = lerp(3.6, 0.35, seg(R.clouds));
   cu.uSkyDay.value = seg([0.3, 0.45]);
   cu.uTime.value = clock;
   renderer.setRenderTarget(null);
   renderer.render(compScene, flatCam);
 
-  placeDom(waterY);
+  placeDom();
   requestAnimationFrame(frame);
 }
 
@@ -1039,7 +1215,7 @@ function frame(now) {
 // Events
 // ===========================================================================
 
-addEventListener('resize', resize);
+addEventListener('resize', () => { resize(); renderSpots(); });
 $('#nav-leaderboard').onclick = () => scrollToP(1);
 $('#teaser').onclick = () => scrollToP(1);
 $('#back').onclick = () => scrollToP(0);
@@ -1054,4 +1230,8 @@ renderBoard('week');
 resize();
 if (location.hash === '#leaderboard') requestAnimationFrame(() => scrollTo(0, maxScroll()));
 p = pTarget;
+// Start at College Station (or wherever TIDECAST_HOME says); if the visitor already allowed
+// location access, use where they really are.
+useLocation({ ...HOME });
+navigator.permissions?.query({ name: 'geolocation' }).then((s) => { if (s.state === 'granted') locate(); }).catch(() => {});
 requestAnimationFrame(frame);

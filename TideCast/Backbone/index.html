@@ -11,12 +11,13 @@
   <link rel="stylesheet" href="tidecast.css">
   <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
   <script src="leaderboard.js"></script>
+  <script src="fish-points.js"></script>
+  <script src="waters.js"></script>
 </head>
 <body>
   <!-- The whole journey is one WebGL canvas driven by the page's scroll position -->
   <canvas id="stage" aria-hidden="true"></canvas>
   <div id="overlay" aria-hidden="true"></div>
-  <div id="underlay" aria-hidden="true"></div>
 
   <header class="top">
     <a class="logo" href="./" aria-label="Tidecast home">
@@ -45,21 +46,23 @@
       <span class="teaser-go">Leaderboard ↓</span>
     </button>
   </main>
-  <div id="scroll-hint" aria-hidden="true"><span>Scroll to follow the signal</span><i></i></div>
+  <div id="scroll-hint" aria-hidden="true"><span>Scroll to dive in</span><i></i></div>
 
-  <!-- Story captions, faded in and out by scroll position -->
-  <div id="captions" aria-live="polite">
-    <p data-cap="signal"><small>01 · SIGNAL</small>A tagged fish pings from <b>Lake Somerville, Texas</b> — 40 km from College Station.</p>
-    <p data-cap="descent"><small>02 · DESCENT</small>Follow the signal down through the atmosphere, from orbit to the water.</p>
-    <p data-cap="surface"><small>03 · SURFACE</small>Every ping is a position. Positions become paths.</p>
-    <p data-cap="under"><small>04 · BENEATH</small>Tagged fish trace where they move, feed and rest.</p>
-  </div>
+  <!-- Your location and the spots to fish around it -->
+  <aside id="spots" aria-labelledby="spots-title">
+    <header>
+      <div><small>FISH NEAR YOU</small><h2 id="spots-title">Spots around you</h2></div>
+      <button id="locate" type="button"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Find my location</button>
+    </header>
+    <p id="spots-where" aria-live="polite"></p>
+    <ol id="spots-list"></ol>
+  </aside>
 
   <nav id="chapters" aria-label="Chapters">
     <button data-to="0" aria-label="Earth"><span>Earth</span></button>
-    <button data-to="0.16" aria-label="Signal"><span>Signal</span></button>
+    <button data-to="0.18" aria-label="Your water"><span>Your water</span></button>
     <button data-to="0.38" aria-label="Descent"><span>Descent</span></button>
-    <button data-to="0.6" aria-label="Surface"><span>Surface</span></button>
+    <button data-to="0.58" aria-label="Surface"><span>Surface</span></button>
     <button data-to="0.8" aria-label="Beneath"><span>Beneath</span></button>
     <button data-to="1" aria-label="Leaderboard"><span>Leaderboard</span></button>
   </nav>
@@ -86,9 +89,9 @@
       <small>HOW IT WORKS</small>
       <h2 id="how-title">Three steps to your next great catch</h2>
       <ol>
-        <li><b>Explore the waters.</b> Pick any stretch of ocean or lake and see every fish recorded there, live from OBIS.</li>
-        <li><b>Learn what’s biting.</b> Layer in fishing activity, protected areas and vessel data from Global Fishing Watch.</li>
-        <li><b>Make every catch count.</b> Log your catch and climb the Tidecast leaderboard.</li>
+        <li><b>Find water near you.</b> Share your location and see the lakes, rivers and bays around you, and which fish to go for.</li>
+        <li><b>Learn what’s biting.</b> Explore the globe in the fish atlas: every species recorded in a stretch of water, live from OBIS, with fishing activity from Global Fishing Watch.</li>
+        <li><b>Make every catch count.</b> Upload a photo of your catch, earn points for the species, and climb the Tidecast leaderboard.</li>
       </ol>
     </div>
   </section>

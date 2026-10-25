@@ -9,6 +9,10 @@ Serves the static atlas and implements the API routes the front end calls:
   /api/gfw/<path>                    pass-through to the Global Fishing Watch API,
                                      adding the API token server-side
   /api/config                        what is available (e.g. whether a GFW token is set)
+  /api/water?lat=&lon=               named lakes / reservoirs / bays nearest a point (OpenStreetMap)
+  /api/water/shape?osm=way/123       outline of one of those waters plus an open-water point
+  /api/reverse?lat=&lon=             place name for a point (Photon)
+  /api/sat?bbox=w,s,e,n&w=&h=        satellite image of a lon/lat box (Esri World Imagery)
   /data/<Species_name>.json          cached OBIS sample; fetched and saved on first use
 
 Standard library only. Run:  python3 server.py   (then open http://localhost:8765)
@@ -38,6 +42,10 @@ PORT = int(os.environ.get("PORT", "8790"))
 OBIS = os.environ.get("OBIS_URL", "https://api.obis.org/v3")
 GFW = os.environ.get("GFW_URL", "https://gateway.api.globalfishingwatch.org/v3")
 PHOTON = os.environ.get("PHOTON_URL", "https://photon.komoot.io/api/")
+PHOTON_REVERSE = os.environ.get("PHOTON_REVERSE_URL", "https://photon.komoot.io/reverse")
+OVERPASS = os.environ.get("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
+ESRI_EXPORT = os.environ.get("ESRI_EXPORT_URL",
+                             "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export")
 # Records returned per species query. OBIS pages are capped at 10,000; above
 # that the server pages through results. The globe stays smooth to ~20,000.
 MAX_RECORDS = int(os.environ.get("PELAGIC_MAX_RECORDS", "5000"))
@@ -174,6 +182,144 @@ def obis_occurrences(species, bbox=None, limit=MAX_RECORDS):
     return {"total": total, "results": results}
 
 
+# ---- Nearby waters (OpenStreetMap via Overpass) ------------------------------
+SKIP_WATER = {"wastewater", "swimming_pool", "fountain", "basin", "moat", "reflecting_pool", "fish_pass"}
+
+
+def overpass(query):
+    status, _, data = fetch(OVERPASS, "POST", urllib.parse.urlencode({"data": query}).encode(),
+                            {"Content-Type": "application/x-www-form-urlencoded"}, timeout=60)
+    if status >= 400:
+        raise RuntimeError(f"Overpass -> HTTP {status}: {data[:200]!r}")
+    return json.loads(data)
+
+
+def km_between(lat1, lon1, lat2, lon2):
+    import math
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 12742 * math.asin(math.sqrt(a))
+
+
+def nearby_waters(lat, lon):
+    """Named lakes, reservoirs and bays around a point, nearest first (tiny ponds left out)."""
+    for radius in (40000, 120000):
+        q = (f'[out:json][timeout:40];(way["natural"="water"]["name"](around:{radius},{lat},{lon});'
+             f'relation["natural"="water"]["name"](around:{radius},{lat},{lon});'
+             f'way["natural"="bay"]["name"](around:{radius},{lat},{lon}););out tags center bb;')
+        found = []
+        for el in overpass(q).get("elements", []):
+            tags, bb, c = el.get("tags", {}), el.get("bounds"), el.get("center")
+            if not bb or not c or tags.get("water") in SKIP_WATER:
+                continue
+            size = km_between(bb["minlat"], bb["minlon"], bb["maxlat"], bb["maxlon"])
+            if size < 0.35:
+                continue
+            kind = tags.get("water") or tags.get("natural") or "water"
+            found.append({
+                "name": tags["name"], "kind": kind.replace("_", " ").capitalize(),
+                "water": "salt" if kind in ("bay", "lagoon", "sea") or tags.get("salt") == "yes" else "fresh",
+                "lat": c["lat"], "lon": c["lon"], "sizeKm": round(size, 2),
+                "bbox": [bb["minlon"], bb["minlat"], bb["maxlon"], bb["maxlat"]],
+                "osm": f'{el["type"]}/{el["id"]}',
+                "km": round(km_between(lat, lon, c["lat"], c["lon"]), 1),
+            })
+        if found:
+            seen, out = set(), []
+            for w in sorted(found, key=lambda w: w["km"]):
+                if w["name"] not in seen:
+                    seen.add(w["name"])
+                    out.append(w)
+            return out[:8]
+    return []
+
+
+def join_rings(ways):
+    """Joins way segments (lists of [lon, lat]) end to end into closed rings."""
+    ways = [list(w) for w in ways if len(w) > 1]
+    rings = []
+    while ways:
+        ring = ways.pop(0)
+        changed = True
+        while ring[0] != ring[-1] and changed:
+            changed = False
+            for i, w in enumerate(ways):
+                if w[0] == ring[-1]:
+                    ring += w[1:]
+                elif w[-1] == ring[-1]:
+                    ring += w[::-1][1:]
+                elif w[-1] == ring[0]:
+                    ring = w[:-1] + ring
+                elif w[0] == ring[0]:
+                    ring = w[::-1][:-1] + ring
+                else:
+                    continue
+                ways.pop(i)
+                changed = True
+                break
+        if len(ring) > 3:
+            rings.append(ring)
+    return rings
+
+
+def water_shape(osm):
+    """Outline rings of a water (outer, inner) and a point well inside its open water."""
+    kind, _, num = osm.partition("/")
+    if kind not in ("way", "relation") or not num.isdigit():
+        raise ValueError("osm must look like way/123 or relation/123")
+    el = (overpass(f"[out:json][timeout:60];{kind}({num});out geom;").get("elements") or [None])[0]
+    if not el:
+        raise RuntimeError("not found")
+    pts = lambda g: [[round(p["lon"], 6), round(p["lat"], 6)] for p in g]
+    if kind == "way":
+        outer, inner = [pts(el.get("geometry", []))], []
+    else:
+        members = [m for m in el.get("members", []) if m.get("type") == "way" and m.get("geometry")]
+        outer = join_rings([pts(m["geometry"]) for m in members if m.get("role") != "inner"])
+        inner = join_rings([pts(m["geometry"]) for m in members if m.get("role") == "inner"])
+    return {"outer": outer, "inner": inner, "target": open_water_point(outer, inner)}
+
+
+def open_water_point(outer, inner):
+    """The point farthest from any shore (grid search), so a dive lands in open water."""
+    import math
+    rings = [r[:: max(1, len(r) // 400)] for r in outer + inner]
+    allp = [p for r in outer for p in r]
+    if not allp:
+        return None
+    w, e = min(p[0] for p in allp), max(p[0] for p in allp)
+    s, n = min(p[1] for p in allp), max(p[1] for p in allp)
+    kx = math.cos(math.radians((s + n) / 2))
+
+    def inside(x, y, ring):
+        c = False
+        for (x1, y1), (x2, y2) in zip(ring, ring[1:] + ring[:1]):
+            if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+                c = not c
+        return c
+
+    def shore(x, y):
+        best = 1e9
+        for r in rings:
+            for (x1, y1), (x2, y2) in zip(r, r[1:]):
+                dx, dy = (x2 - x1) * kx, y2 - y1
+                px, py = (x - x1) * kx, y - y1
+                t = max(0.0, min(1.0, (px * dx + py * dy) / (dx * dx + dy * dy or 1e-12)))
+                best = min(best, (px - t * dx) ** 2 + (py - t * dy) ** 2)
+        return best
+
+    best, at = -1, None
+    steps = 24
+    for i in range(steps):
+        for j in range(steps):
+            x, y = w + (e - w) * (i + 0.5) / steps, s + (n - s) * (j + 0.5) / steps
+            if any(inside(x, y, r) for r in outer) and not any(inside(x, y, r) for r in inner):
+                d = shore(x, y)
+                if d > best:
+                    best, at = d, [round(x, 6), round(y, 6)]
+    return at
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
@@ -222,6 +368,15 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.observations(query)
             if url.path == "/api/places":
                 return self.places(query)
+            if url.path == "/api/water":
+                return self.waters(query)
+            if url.path == "/api/water/shape":
+                return self.cached_json("shape:" + (query.get("osm") or [""])[0],
+                                        lambda: water_shape((query.get("osm") or [""])[0]))
+            if url.path == "/api/reverse":
+                return self.reverse(query)
+            if url.path == "/api/sat":
+                return self.satellite(query)
             if url.path.startswith("/api/obis/"):
                 return self.proxy(OBIS + url.path[len("/api/obis"):], url.query)
             if url.path.startswith("/api/gfw/"):
@@ -274,6 +429,52 @@ class Handler(SimpleHTTPRequestHandler):
             results.append({"name": p.get("name") or q, "context": context or p.get("type", ""),
                             "lon": lon, "lat": lat})
         self.send_json({"results": results})
+
+    def cached_json(self, key, make):
+        data = cache.get(key)
+        if data is None:
+            data = json.dumps(make()).encode()
+            cache.put(key, data)
+        self.send_bytes(200, "application/json", data, cache_seconds=3600)
+
+    def point(self, query):
+        lat, lon = float(query["lat"][0]), float(query["lon"][0])
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError("lat/lon out of range")
+        return lat, lon
+
+    def waters(self, query):
+        lat, lon = self.point(query)
+        self.cached_json(f"water:{lat:.3f},{lon:.3f}", lambda: {"waters": nearby_waters(lat, lon)})
+
+    def reverse(self, query):
+        lat, lon = self.point(query)
+
+        def make():
+            data = fetch_json(PHOTON_REVERSE + "?" + urllib.parse.urlencode({"lat": lat, "lon": lon}))
+            p = (data.get("features") or [{}])[0].get("properties", {})
+            place = p.get("city") or p.get("town") or p.get("village") or p.get("county") or p.get("name") or ""
+            region = p.get("state") or p.get("country") or ""
+            return {"name": ", ".join(x for x in [place, region] if x)}
+        self.cached_json(f"rev:{lat:.3f},{lon:.3f}", make)
+
+    def satellite(self, query):
+        w, s, e, n = [float(v) for v in (query.get("bbox") or [""])[0].split(",")]
+        if not (-180 <= w < e <= 180 and -85 <= s < n <= 85 and e - w <= 5 and n - s <= 5):
+            return self.send_json({"error": "bad bbox"}, 400)
+        width = max(64, min(2048, int((query.get("w") or ["1024"])[0])))
+        height = max(64, min(2048, int((query.get("h") or ["1024"])[0])))
+        url = ESRI_EXPORT + "?" + urllib.parse.urlencode({
+            "bbox": f"{w},{s},{e},{n}", "bboxSR": 4326, "imageSR": 4326,
+            "size": f"{width},{height}", "format": "jpg", "f": "image"})
+        hit = cache.get("sat:" + url)
+        if not hit:
+            status, ctype, data = fetch(url, timeout=60)
+            if status != 200 or not ctype.startswith("image/"):
+                return self.send_json({"error": f"imagery unavailable ({status})"}, 502)
+            hit = (ctype, data)
+            cache.put("sat:" + url, hit)
+        self.send_bytes(200, hit[0], hit[1], cache_seconds=86400)
 
     def sample(self, path):
         name = os.path.basename(path)

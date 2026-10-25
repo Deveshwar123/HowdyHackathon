@@ -4,7 +4,7 @@ Find your next great catch. Explore the waters. Learn what's biting. Make every 
 
 | Folder | What it is |
 |---|---|
-| [`Backbone/`](Backbone/) | The TideCast landing page: rotating photoreal Earth, and the Earth → water drop → lake → leaf → leaderboard sequence |
+| [`Backbone/`](Backbone/) | The TideCast landing page: rotating photoreal Earth → your location → a dive onto the water nearest you → underwater → leaderboard; plus spots to fish around you |
 | [`FishMigration/`](FishMigration/) | The fish atlas: live OBIS fish records and Global Fishing Watch data on a 3D globe |
 
 ## Run it

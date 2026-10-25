@@ -28,7 +28,8 @@ a { color: inherit; }
 .pin span { position: absolute; left: 50%; bottom: 34px; transform: translateX(-38%); display: flex; align-items: center; gap: 9px; padding: 9px 16px 9px 14px; border-radius: 22px; background: rgba(20, 26, 32, .78); border: 1px solid rgba(255, 255, 255, .12); backdrop-filter: blur(6px); font-size: 15px; color: #f2f2f0; white-space: nowrap; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); }
 .pin span svg { width: 15px; height: 15px; }
 .pin.target i { background: var(--coral); box-shadow: 0 0 0 4px rgba(239, 145, 104, .25), 0 0 22px rgba(239, 145, 104, .9); }
-.pin.target span { border-color: rgba(239, 145, 104, .5); }
+.pin.target span { border-color: rgba(239, 145, 104, .5); transform: translateX(-62%); }
+.pin span em { font-style: normal; }
 .fish { position: absolute; width: 46px; height: 14px; transform: translate(-50%, -50%); opacity: .55; }
 
 /* ---- Header ------------------------------------------------------------- */
@@ -49,7 +50,7 @@ h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(54
 .cta.small { margin: 0; padding: 14px 26px; gap: 12px; font-size: 12px; }
 .teaser { position: absolute; left: 0; bottom: -46px; width: min(100%, 700px); display: flex; align-items: center; gap: 18px; padding: 16px 22px 62px 16px; border-radius: 18px; border: 1px solid rgba(255, 255, 255, .16); background: rgba(14, 28, 40, .45); backdrop-filter: blur(10px); text-align: left; transition: transform .3s, border-color .3s; }
 .teaser:hover { transform: translateY(-8px); border-color: rgba(239, 145, 104, .5); }
-.teaser-art { width: 92px; height: 58px; border-radius: 10px; flex: none; background: url(assets/lake.jpg) 52% 70%/360px auto; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .15); }
+.teaser-art { width: 92px; height: 58px; border-radius: 10px; flex: none; background: url(assets/lake-sat.jpg) 30% 48%/520px auto; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .15); }
 .teaser-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .teaser-text small { font-size: 11px; letter-spacing: .22em; color: var(--coral-hi); }
 .teaser-text strong { font-family: var(--serif); font-weight: 500; font-size: 22px; }
@@ -106,11 +107,30 @@ h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(54
 @media (max-width: 560px) { nav #nav-how { display: none; } .logo span { letter-spacing: .3em; } }
 
 /* ---- Journey UI -------------------------------------------------------- */
-/* Water tint over whatever is below the waterline (the rising leaderboard). */
-#underlay { position: fixed; left: 0; right: 0; bottom: 0; top: 100%; z-index: 10; pointer-events: none;
-  background: linear-gradient(180deg, rgba(40, 110, 100, .28), rgba(6, 36, 34, .5));
-  backdrop-filter: blur(3px) saturate(1.15); -webkit-backdrop-filter: blur(3px) saturate(1.15);
-  border-top: 1px solid rgba(220, 255, 245, .55); box-shadow: 0 -1px 10px rgba(220, 255, 245, .35); }
+/* Spots to fish around you (bottom left) */
+#spots { position: fixed; z-index: 8; left: clamp(16px, 3.1vw, 62px); bottom: clamp(16px, 5vh, 56px); width: min(400px, calc(100vw - 32px)); max-height: calc(100svh - 140px); overflow: auto; opacity: 0; visibility: hidden; padding: 18px 18px 14px; border-radius: 22px;
+  background: rgba(9, 22, 36, .62); border: 1px solid rgba(255, 255, 255, .14); backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); box-shadow: 0 18px 50px rgba(0, 0, 0, .35); }
+#spots > header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+#spots small { font-size: 10.5px; letter-spacing: .24em; color: var(--coral-hi); }
+#spots h2 { margin: 3px 0 0; font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.05; }
+#locate { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 999px; background: linear-gradient(180deg, var(--coral-hi), var(--coral)); color: #16212b; font-size: 12.5px; font-weight: 700; letter-spacing: .02em; box-shadow: 0 6px 18px rgba(239, 145, 104, .3); }
+#locate:hover { transform: translateY(-1px); }
+#locate:disabled { opacity: .7; cursor: progress; }
+#locate.busy svg { animation: spin 1.6s linear infinite; }
+#spots-where { margin: 10px 0 8px; font-size: 13px; color: var(--muted); }
+#spots-where b { color: var(--ink); font-weight: 500; }
+#spots-where span { opacity: .7; }
+#spots-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+#spots-list button { width: 100%; display: grid; gap: 3px; padding: 10px 12px; border-radius: 14px; text-align: left; background: rgba(255, 255, 255, .05); border: 1px solid transparent; transition: background .2s, border-color .2s; }
+#spots-list button:hover { background: rgba(255, 255, 255, .09); }
+#spots-list button[aria-pressed="true"] { border-color: rgba(239, 145, 104, .6); background: rgba(239, 145, 104, .1); }
+.spot-head { display: flex; justify-content: space-between; gap: 10px; }
+.spot-head strong { font-weight: 500; font-size: 15px; }
+.spot-head em { font-style: normal; font-size: 13px; color: var(--coral-hi); white-space: nowrap; }
+.spot-kind { font-size: 11.5px; color: var(--muted); }
+.spot-fish { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+.spot-fish i { font-style: normal; font-size: 11.5px; padding: 3px 8px; border-radius: 999px; background: rgba(120, 190, 255, .1); color: #d6e6f4; }
+.spot-fish b { color: var(--coral-hi); font-weight: 700; margin-left: 2px; }
 
 #scroll-hint { position: fixed; z-index: 5; left: 50%; bottom: 26px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--ink-soft); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; pointer-events: none; }
 #scroll-hint span { white-space: nowrap; padding: 6px 14px; border-radius: 14px; background: rgba(4, 12, 20, .45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
@@ -118,21 +138,16 @@ h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(54
 #scroll-hint i::after { content: ''; position: absolute; left: 50%; top: 7px; width: 3px; height: 7px; margin-left: -1.5px; border-radius: 2px; background: var(--coral); animation: wheel 1.8s ease-in-out infinite; }
 @keyframes wheel { 0% { opacity: 0; transform: translateY(-3px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(10px); } }
 
-#captions { position: fixed; z-index: 6; left: clamp(24px, 3.1vw, 62px); bottom: clamp(28px, 7vh, 80px); width: min(440px, calc(100vw - 48px)); pointer-events: none; }
-#captions p { position: absolute; left: 0; bottom: 0; margin: 0; opacity: 0; font-family: var(--serif); font-size: clamp(20px, 1.7vw, 30px); line-height: 1.3; color: #fff; text-shadow: 0 2px 18px rgba(0, 0, 0, .55); }
-#captions small { display: block; margin-bottom: 8px; font-family: var(--sans); font-size: 11px; letter-spacing: .26em; color: var(--coral-hi); }
-#captions b { font-weight: 500; }
-
 #chapters { position: fixed; z-index: 11; right: clamp(14px, 2vw, 34px); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 14px; }
 #chapters button { position: relative; width: 10px; height: 10px; padding: 0; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .7); background: rgba(0, 0, 0, .15); transition: background .3s, transform .3s; }
 #chapters button.on { background: var(--coral); border-color: var(--coral); transform: scale(1.25); }
 #chapters span { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px; color: #fff; text-shadow: 0 1px 8px rgba(0, 0, 0, .6); opacity: 0; transition: opacity .2s; }
 #chapters button:hover span, #chapters button:focus-visible span { opacity: 1; }
 
-/* Tag chips that follow tagged fish underwater */
-.tag-chip { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 7px; padding: 5px 10px 5px 8px; border-radius: 14px; background: rgba(4, 30, 28, .55); border: 1px solid rgba(160, 255, 230, .35); color: #e9fff8; font-size: 11px; letter-spacing: .04em; white-space: nowrap; backdrop-filter: blur(4px); }
-.tag-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 8px var(--coral); }
-.tag-chip b { font-weight: 700; letter-spacing: .08em; }
+/* "+points" when a fish is reeled out of the water */
+.catch-pop { position: absolute; left: 0; top: 0; opacity: 0; display: grid; justify-items: center; gap: 2px; padding: 8px 14px; border-radius: 14px; background: rgba(9, 22, 36, .62); border: 1px solid rgba(239, 145, 104, .55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); white-space: nowrap; box-shadow: 0 8px 26px rgba(0, 0, 0, .3); }
+.catch-pop b { font-family: var(--serif); font-weight: 500; font-size: 22px; color: var(--coral-hi); line-height: 1; }
+.catch-pop span { font-size: 11px; letter-spacing: .08em; color: #e6eef6; }
 
 body.in-water nav { padding: 8px 22px; border-radius: 999px; background: rgba(8, 26, 22, .38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 body.in-water .logo { padding: 6px 16px 6px 10px; border-radius: 999px; background: rgba(8, 26, 22, .3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
@@ -146,6 +161,9 @@ body.in-water .logo { padding: 6px 16px 6px 10px; border-radius: 999px; backgrou
   nav a, nav button { font-size: 14px; }
   body.in-water nav { padding: 6px 14px; }
   .teaser { display: none; }
-  #captions { bottom: 64px; }
-  #captions p { font-size: 19px; }
+  #spots { left: 12px; right: 12px; width: auto; bottom: 12px; padding: 14px 14px 10px; max-height: 46svh; }
+  #spots h2 { font-size: 20px; }
+  #spots-where { margin: 6px 0; font-size: 12px; }
+  #spots-list button { padding: 8px 10px; }
+  .spot-kind { display: none; }
 }
