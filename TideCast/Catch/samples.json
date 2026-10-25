@@ -1,0 +1,10 @@
+[
+  {"angler": "Maya Chen", "species": "Redfish", "length_cm": 80, "location": "Galveston Bay, TX", "days_ago": 1},
+  {"angler": "Diego Ramírez", "species": "Largemouth Bass", "weight_lb": 8.4, "location": "Lake Conroe, TX", "days_ago": 2},
+  {"angler": "Avery Brooks", "species": "Spotted Seatrout", "length_cm": 66, "location": "Port Aransas, TX", "days_ago": 2},
+  {"angler": "Sam Okafor", "species": "Blue Catfish", "weight_lb": 41.2, "location": "Lake Livingston, TX", "days_ago": 3},
+  {"angler": "Priya Natarajan", "species": "Mahi-Mahi", "weight_lb": 38, "location": "Gulf of Mexico", "days_ago": 3},
+  {"angler": "Jordan Lee", "species": "White Crappie", "weight_lb": 2.6, "location": "Lake Somerville, TX", "days_ago": 4},
+  {"angler": "Elena Petrova", "species": "Tarpon", "length_cm": 188, "location": "Port O'Connor, TX", "days_ago": 52},
+  {"angler": "Marcus Hill", "species": "Red Snapper", "weight_lb": 22.1, "location": "Freeport, TX", "days_ago": 103}
+]

@@ -8,7 +8,7 @@ body.px-on .timeline,
 body.px-on .area-chip,
 body.px-on .record-popup,
 body.px-on .instructions,
-body.px-on header nav { display: none !important; }
+body.px-on main > header nav { display: none !important; }
 body.px-on .sidebar { overflow: hidden; }
 /* No right panel: the map takes its width; results float over the map in a card. */
 body.px-on .details { display: none !important; }

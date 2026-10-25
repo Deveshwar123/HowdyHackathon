@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
   <link rel="stylesheet" href="tidecast.css">
   <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
-  <script src="leaderboard.js"></script>
   <script src="fish-points.js"></script>
   <script src="waters.js"></script>
   <script src="stats.js"></script>
@@ -20,27 +20,12 @@
   <canvas id="stage" aria-hidden="true"></canvas>
   <div id="overlay" aria-hidden="true"></div>
 
-  <header class="top">
-    <a class="logo" href="./" aria-label="Tidecast home">
-      <svg viewBox="0 0 64 40" width="58" height="36" aria-hidden="true">
-        <defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#f7b28a"/><stop offset="1" stop-color="#e57a52"/></linearGradient></defs>
-        <path d="M3 11c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
-        <path d="M3 21c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
-        <path d="M3 31c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
-      </svg>
-      <span>TIDECAST</span>
-    </a>
-    <nav aria-label="Main">
-      <a href="../" class="active">Explore</a>
-      <a href="leaderboard.html">Leaderboard</a>
-      <button id="nav-how" type="button">How it works</button>
-    </nav>
-  </header>
+  <header data-site-header></header>
 
   <main id="hero">
     <h1>Find your next<br>great catch.</h1>
     <p class="lede">Explore the waters. Learn what’s biting.<br>Make every catch count.</p>
-    <a class="cta" href="../">EXPLORE THE WATERS <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a class="cta" href="catch.html">LOG A CATCH <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
     <a class="teaser" id="teaser" href="leaderboard.html" aria-label="Go to the leaderboard">
       <span class="teaser-art" aria-hidden="true"></span>
       <span class="teaser-text"><small>THIS WEEK’S TOP CATCH</small><strong id="teaser-title">—</strong><span id="teaser-sub"></span></span>
@@ -73,22 +58,23 @@
         <svg viewBox="0 0 24 24" width="54" height="54" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10 8l6 4-6 4z" fill="currentColor"/></svg>
         <strong>Program walkthrough</strong>
         <span>Video or interactive demo of the TideCast app goes here.</span>
+        <a class="cta small" href="catch.html">TRY IT NOW: LOG A CATCH →</a>
       </div>
       <ol class="steps">
-        <li><b>Find water near you</b><span>Open <a href="../">Explore the waters</a> and tap <em>Spots near me</em>: nearby lakes, rivers and bays, and which fish to go for.</span></li>
-        <li><b>Learn what’s biting</b><span>Every species recorded in that water (OBIS), plus fishing activity from Global Fishing Watch, on the 3D globe.</span></li>
-        <li><b>Catch and snap</b><span>Photograph the whole fish, side-on, on a measuring board or next to a reference object.</span></li>
-        <li><b>Upload</b><span>Our model identifies the species and estimates its length; your location and time are attached.</span></li>
-        <li><b>Earn points</b><span>Points by species, size and the scoring rules — then climb the weekly and all-time boards.</span></li>
+        <li><b>Find water near you</b><span>Open <a href="/">Explore the waters</a> and tap <em>Spots near me</em>: the lakes, rivers and bays around you, and which fish to go for.</span></li>
+        <li><b>Learn what’s biting</b><span>Every species recorded in that water (OBIS) and fishing activity from Global Fishing Watch, on a 3D globe.</span></li>
+        <li><b>Hold it, knuckles out</b><span>Photograph the whole fish side-on, gripping it so your knuckles face the camera. Your hand is the ruler.</span></li>
+        <li><b>Upload</b><span>AI identifies the species and traces the fish and your knuckles; you can drag any point to correct it.</span></li>
+        <li><b>Earn points</b><span>Length becomes weight on the species’ own curve, then points: rarity + 10 per pound + a trophy bonus.</span></li>
       </ol>
       <div class="rules">
-        <div class="rules-head"><h3>To get on the leaderboard</h3><span class="ph-tag">Placeholder rules</span></div>
+        <div class="rules-head"><h3>To get on the leaderboard</h3></div>
         <ul>
-          <li>Create a TideCast account and allow location while fishing.</li>
-          <li>Upload a clear photo of each catch within 24 hours, whole fish visible.</li>
-          <li>The catch must be legal: licensed angler, in season, at or above size limits.</li>
-          <li>One fish per photo; no repeats of the same fish.</li>
-          <li>Weekly board resets every Monday; all-time keeps every catch.</li>
+          <li>The whole fish and your knuckles are visible in the photo (or you mark them yourself).</li>
+          <li>One photo, one entry: the same photo can’t be posted twice.</li>
+          <li>Sizes past a species’ record length are rejected as scale errors.</li>
+          <li>Keep it legal: licensed, in season and within size limits where you fish.</li>
+          <li>The weekly board resets every Monday; all-time keeps every catch.</li>
         </ul>
       </div>
     </section>
@@ -104,13 +90,15 @@
       <div class="stat-grid" id="stats-model"></div>
       <ul class="sources" id="stats-sources"></ul>
       <footer class="after-foot">
-        <a class="cta small" href="../">EXPLORE THE WATERS →</a>
+        <a class="cta small" href="catch.html">LOG A CATCH →</a>
         <a class="cta small ghost" href="leaderboard.html">SEE THE LEADERBOARD →</a>
+        <a class="cta small ghost" href="/">EXPLORE THE WATERS →</a>
         <button id="to-top" type="button">↑ Back to the globe</button>
       </footer>
     </section>
   </div>
 
+  <script src="site.js"></script>
   <script type="module" src="tidecast.js"></script>
 </body>
 </html>

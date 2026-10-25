@@ -1,0 +1,89 @@
+/* Leaderboard + species pages */
+.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.controls .select { width: auto; min-width: 200px; border-radius: 999px; padding: 10px 40px 10px 16px; font-size: 14px; }
+.controls .input { width: 240px; border-radius: 999px; padding: 10px 16px; font-size: 14px; }
+
+/* Fish art (photo, or a tinted silhouette when there's no photo) */
+.fish-art { position: relative; overflow: hidden; background: radial-gradient(120% 90% at 30% 20%, color-mix(in srgb, var(--rc, #8fc3ff) 30%, transparent), transparent 60%), linear-gradient(160deg, #10283a, #0a1a28); }
+.fish-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fish-art svg { position: absolute; inset: 0; margin: auto; width: 78%; height: auto; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .45)); }
+.row .fish-art svg { width: 90%; }
+.r-common { --rc: #b9c7d2; } .r-uncommon { --rc: #8fe0b0; } .r-rare { --rc: #8fc3ff; } .r-epic { --rc: #c9a6ff; } .r-legendary { --rc: #ffc27a; }
+
+/* Podium */
+.podium3 { display: grid; grid-template-columns: 1fr 1.12fr 1fr; gap: 16px; align-items: end; margin-bottom: 18px; }
+.pod { overflow: hidden; display: flex; flex-direction: column; animation: rise .7s var(--ease) both; }
+.pod .fish-art { aspect-ratio: 4 / 3; }
+.pod.first .fish-art { aspect-ratio: 4 / 3.3; }
+.pod-body { padding: 16px 18px 18px; display: grid; gap: 6px; }
+.pod-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.medal { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; font-family: var(--serif); font-size: 22px; color: #13202b; background: linear-gradient(160deg, #e9eef2, #a9b6c0); box-shadow: 0 4px 14px rgba(0, 0, 0, .3); }
+.first .medal { background: linear-gradient(160deg, #ffe0b8, #f0a865); width: 46px; height: 46px; font-size: 26px; }
+.third .medal { background: linear-gradient(160deg, #f1c9a8, #b9774e); }
+.pod-pts { font-family: var(--serif); font-size: 30px; color: var(--coral-hi); line-height: 1; }
+.pod-pts small { font-family: var(--sans); font-size: 12px; color: var(--muted); }
+.pod h3 { margin: 4px 0 0; font-weight: 500; font-size: 18px; }
+.pod .meta { font-size: 13px; color: var(--muted); }
+.pod .measure { font-family: var(--serif); font-size: 20px; }
+.pod.first { box-shadow: 0 30px 80px rgba(239, 145, 104, .18), inset 0 0 0 1px rgba(239, 145, 104, .4); }
+.pod.first { animation-delay: .05s; } .pod.second { animation-delay: .12s; } .pod.third { animation-delay: .19s; }
+.pod.mine, .row.mine { box-shadow: 0 0 0 2px var(--coral), 0 20px 60px rgba(239, 145, 104, .25); }
+
+/* Board table */
+.board-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+@media (max-width: 1020px) { .board-wrap { grid-template-columns: 1fr; } }
+.rows { list-style: none; margin: 0; padding: 6px; }
+.row { display: grid; grid-template-columns: 36px 56px minmax(0, 1.4fr) minmax(0, 1fr) 90px 90px; gap: 14px; align-items: center; padding: 10px 12px; border-radius: 16px; transition: background .2s; animation: rise .6s var(--ease) both; }
+.row:hover { background: rgba(255, 255, 255, .04); }
+.row + .row { margin-top: 2px; }
+.row .rank { font-family: var(--serif); font-size: 22px; color: var(--ink-soft); text-align: center; }
+.row .fish-art { width: 56px; height: 56px; border-radius: 12px; }
+.row .who strong { display: block; font-weight: 500; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .who .tag, .pod .tag { display: inline-flex; margin-left: 8px; vertical-align: 2px; font-size: 9px; padding: 2px 7px; }
+.row .who > span { display: block; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .sp { display: grid; gap: 4px; justify-items: start; font-size: 14px; }
+.row .num { text-align: right; font-family: var(--serif); font-size: 19px; }
+.row .num small { display: block; font-family: var(--sans); font-size: 11.5px; color: var(--muted); }
+.row .pts { text-align: right; font-weight: 700; color: var(--coral-hi); font-size: 16px; }
+.row .pts small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.row-head { display: grid; grid-template-columns: 36px 56px minmax(0, 1.4fr) minmax(0, 1fr) 90px 90px; gap: 14px; padding: 12px 18px 4px; font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.row-head span:nth-last-child(-n+2) { text-align: right; }
+@media (max-width: 700px) {
+  .row, .row-head { grid-template-columns: 28px 48px minmax(0, 1fr) 70px; gap: 10px; }
+  .row .sp, .row .num.len, .row-head .h-sp, .row-head .h-len, .row .who .tag { display: none; }
+  .row .fish-art { width: 48px; height: 48px; }
+  .podium3 { grid-template-columns: 1fr; }
+  .pod.first { order: -1; }
+}
+.empty { padding: 50px 20px; text-align: center; color: var(--muted); }
+.empty strong { display: block; font-family: var(--serif); font-weight: 400; font-size: 28px; color: var(--ink); margin-bottom: 8px; }
+
+.rules-card { display: grid; gap: 14px; }
+.rules-card ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rules-card li { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+.rules-card li b { color: var(--coral-hi); }
+.reset { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: rgba(4, 14, 24, .45); box-shadow: inset 0 0 0 1px var(--line); font-size: 13px; color: var(--ink-soft); }
+.reset b { font-family: var(--serif); font-weight: 400; font-size: 20px; color: var(--ink); }
+
+/* Species guide */
+.filters-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { padding: 7px 13px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, .05); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-soft); font: 500 12.5px var(--sans); cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
+.chip[aria-pressed="true"] { background: rgba(239, 145, 104, .16); color: var(--ink); box-shadow: inset 0 0 0 1px rgba(239, 145, 104, .55); }
+.count { margin-left: auto; color: var(--muted); font-size: 13px; }
+.sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.sp-card { overflow: hidden; display: flex; flex-direction: column; animation: rise .6s var(--ease) both; transition: transform .3s var(--ease), box-shadow .3s; }
+.sp-card:hover { transform: translateY(-4px); box-shadow: 0 30px 70px rgba(0, 0, 0, .35), inset 0 0 0 1px color-mix(in srgb, var(--rc) 45%, transparent); }
+.sp-card .fish-art { aspect-ratio: 16 / 8; }
+.sp-card .rarity { position: absolute; left: 14px; top: 14px; }
+.sp-body { padding: 16px 18px 18px; display: grid; gap: 10px; flex: 1; }
+.sp-body h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 25px; line-height: 1.05; }
+.sp-body .sci { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: 14px; margin-top: -6px; }
+.sp-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.sp-stats div { display: grid; gap: 2px; }
+.sp-stats span { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.sp-stats b { font-weight: 500; font-size: 14px; }
+.sp-stats .p b { color: var(--coral-hi); }
+.sp-body p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+.sp-body p em { font-style: normal; color: var(--muted); }
+.water-tag { font-size: 11px; color: var(--teal); letter-spacing: .08em; }

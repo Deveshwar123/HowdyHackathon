@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>TideCast — Species &amp; points</title>
+  <meta name="description" content="Every species TideCast can measure: how to recognize it, where it lives and what it's worth.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="pages.css">
+</head>
+<body class="page">
+  <header data-site-header data-glass></header>
+
+  <main class="page-main">
+    <div class="page-head">
+      <div class="rise">
+        <span class="kicker">Field guide</span>
+        <h1>Every fish, and<br>what it’s worth.</h1>
+        <p class="lede">The species TideCast recognizes in your photos: how to tell them apart, where they live, and the points a typical and a trophy catch earn.</p>
+      </div>
+    </div>
+
+    <div class="filters-row rise-2">
+      <input class="input" id="q" type="search" placeholder="Search a fish" aria-label="Search species" style="width:240px;border-radius:999px;padding:10px 16px">
+      <div class="seg" id="water" role="group" aria-label="Water">
+        <button type="button" data-water="" aria-pressed="true">All</button>
+        <button type="button" data-water="fresh" aria-pressed="false">Freshwater</button>
+        <button type="button" data-water="salt" aria-pressed="false">Saltwater</button>
+      </div>
+      <div class="chips" id="rarity" role="group" aria-label="Rarity"></div>
+      <span class="count" id="count"></span>
+    </div>
+
+    <section class="sp-grid" id="grid" aria-live="polite"></section>
+  </main>
+
+  <footer class="site-footer"><span>TideCast · Howdy Hack</span><span><a href="catch.html">Log a catch</a><a href="leaderboard.html">Leaderboard</a><a href="/">Explore the waters</a></span></footer>
+
+  <script src="site.js"></script>
+  <script src="fish-art.js"></script>
+  <script>
+    (() => {
+      const $ = (s) => document.querySelector(s);
+      const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+      const state = { q: '', water: '', rarity: new Set() };
+      let all = [];
+      const isSalt = (s) => /^salt/i.test(s.water);
+      const isFresh = (s) => /fresh/i.test(s.water);
+      const inches = (cm) => Math.round(cm / 2.54);
+
+      function render() {
+        const q = state.q.toLowerCase();
+        const list = all.filter((s) => (!state.water || (state.water === 'salt' ? isSalt(s) || /brackish|salt/i.test(s.water) : isFresh(s)))
+          && (!state.rarity.size || state.rarity.has(s.rarity))
+          && (!q || [s.name, s.scientific, ...(s.aliases || [])].some((x) => x.toLowerCase().includes(q))));
+        $('#count').textContent = `${list.length} of ${all.length} species`;
+        $('#grid').innerHTML = list.map((s, i) => `
+          <article class="card sp-card r-${s.rarity.toLowerCase()}" style="animation-delay:${Math.min(i, 15) * 0.025}s">
+            <div class="fish-art">${window.fishArt(s.name)}<span class="rarity rarity-${s.rarity.toLowerCase()}">${s.rarity}</span></div>
+            <div class="sp-body">
+              <span class="water-tag">${esc(s.water)}</span>
+              <h3>${esc(s.name)}</h3>
+              <span class="sci">${esc(s.scientific)}${s.aliases.length ? ` · also “${esc(s.aliases.join('”, “'))}”` : ''}</span>
+              <div class="sp-stats">
+                <div><span>Typical</span><b>${inches(s.length_cm[0])}–${inches(s.length_cm[1])} in</b></div>
+                <div class="p"><span>Points</span><b>~${s.points_typical}</b></div>
+                <div class="p"><span>Trophy</span><b>${s.points_trophy}+</b></div>
+              </div>
+              <p><em>Look for:</em> ${esc(s.features)}</p>
+              <p><em>Lives in:</em> ${esc(s.habitat)}</p>
+              <p><em>Eats:</em> ${esc(s.diet)}</p>
+            </div>
+          </article>`).join('') || '<p class="muted">No species match.</p>';
+      }
+
+      $('#rarity').innerHTML = RARITIES.map((r) => `<button class="chip" type="button" data-r="${r}" aria-pressed="false">${r}</button>`).join('');
+      $('#rarity').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-r]');
+        if (!b) return;
+        const on = !state.rarity.has(b.dataset.r);
+        on ? state.rarity.add(b.dataset.r) : state.rarity.delete(b.dataset.r);
+        b.setAttribute('aria-pressed', String(on));
+        render();
+      });
+      $('#water').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-water]');
+        if (!b) return;
+        state.water = b.dataset.water;
+        $('#water').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        render();
+      });
+      $('#q').addEventListener('input', (e) => { state.q = e.target.value.trim(); render(); });
+      fetch('/api/species').then((r) => r.json()).then((d) => { all = d.species || []; render(); });
+    })();
+  </script>
+</body>
+</html>

@@ -31,6 +31,11 @@ PATCHES = [
     ("Promise.all(P.map(async e=>{try{", "Promise.all((window.PELAGIC_APP_POINTS?P:[]).map(async e=>{try{"),
     ("let n=new URLSearchParams({species:L.scientific});", "if(!window.PELAGIC_APP_POINTS)throw Error(`off`);let n=new URLSearchParams({species:L.scientific});"),
     ("e.entities.removeAll(),z&&$.forEach", "e.entities.removeAll(),window.PELAGIC_APP_POINTS&&z&&$.forEach"),
+    # TideCast branding (the atlas is TideCast's "Explore the waters").
+    ("`aria-label`:`Pelagic home`".replace("`aria-label`", '"aria-label"'), '"aria-label":`TideCast atlas`'),
+    ("`About Pelagic`", "`About the TideCast atlas`"),
+    ("className:`eyebrow`,children:`Pelagic`", "className:`eyebrow`,children:`TideCast`"),
+    ("Pelagic is an early ocean explorer", "The TideCast atlas is an ocean explorer"),
 ]
 
 src = open(BUNDLE, encoding="utf-8").read()

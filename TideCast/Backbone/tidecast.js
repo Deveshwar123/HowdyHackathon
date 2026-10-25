@@ -754,19 +754,39 @@ function placeDom() {
 }
 
 // Hero teaser: this week's top catch (the full board is leaderboard.html).
-function renderTeaser() {
-  const top = (window.TIDECAST_LEADERBOARD || []).filter((r) => (r.period || 'week') === 'week').sort((a, b) => (b.points || 0) - (a.points || 0))[0];
-  if (!top) return;
-  $('#teaser-title').textContent = `${top.species}, ${top.measure}`;
-  $('#teaser-sub').textContent = `${top.angler} · ${top.location}`;
+async function renderTeaser() {
+  try {
+    const d = await (await fetch('/api/leaderboard?period=week&limit=1')).json();
+    const top = (d.rows || [])[0];
+    if (!top) return;
+    $('#teaser-title').textContent = `${top.species}, ${top.weight_lb >= 10 ? top.weight_lb.toFixed(1) : top.weight_lb.toFixed(2)} lb`;
+    $('#teaser-sub').textContent = `${top.angler}${top.location ? ` · ${top.location}` : ''} · ${top.points.toLocaleString()} pts`;
+    if (top.photo) $('.teaser-art').style.background = `url(/catch-photos/${top.photo}) center / cover`;
+  } catch { /* server without the catch API: leave the placeholder */ }
 }
 
 // ===========================================================================
 // Stats (stats.js): numbers count up when they come into view
 // ===========================================================================
 
-function renderStats() {
+async function renderStats() {
   const S = window.TIDECAST_STATS || {};
+  // Live figures: real catches only; until there are any, the demo rows are counted (and said so).
+  let live = {};
+  try {
+    const d = await (await fetch('/api/stats')).json();
+    const real = d.catches > 0;
+    const src = real ? d : { ...d, ...(d.including_samples || {}) };
+    live = { ...src, species_known: d.species_known, avg_err_pct: d.avg_err == null ? null : Math.round(d.avg_err * 100) };
+    if (!real && d.sample_rows) live.note = `Includes ${d.sample_rows} demo catches until real ones are posted`;
+  } catch { /* offline */ }
+  for (const group of [S.impact || [], S.model || []]) {
+    for (const x of group) {
+      if (!x.live) continue;
+      x.value = live[x.live] ?? null;
+      if (group === S.impact && live.note && !x.note) x.note = live.note;
+    }
+  }
   const card = (x) => `<article class="stat${x.placeholder ? ' placeholder' : ''}">
       <strong data-value="${x.value ?? ''}" data-prefix="${esc(x.prefix || '')}" data-suffix="${esc(x.suffix || '')}" data-decimals="${x.decimals || 0}">${x.value == null ? '—' : esc(x.prefix || '') + '0' + esc(x.suffix || '')}</strong>
       <span>${esc(x.label)}</span>${x.note ? `<small>${esc(x.note)}</small>` : ''}
@@ -861,7 +881,8 @@ const toSection = (id) => document.getElementById(id).scrollIntoView({ behavior:
 addEventListener('resize', resize);
 $('#to-top').onclick = () => scrollToP(0);
 chapterBtns.forEach((b) => (b.onclick = () => (b.dataset.section ? toSection(b.dataset.section) : scrollToP(+b.dataset.to))));
-$('#nav-how').onclick = () => toSection('program');
+$('#nav-how').addEventListener('click', (e) => { e.preventDefault(); toSection('program'); });
+if (location.hash === '#program' || location.hash === '#stats') requestAnimationFrame(() => document.getElementById(location.hash.slice(1)).scrollIntoView());
 
 renderTeaser();
 resize();

@@ -1,4 +1,4 @@
-# FishMigration — the Pelagic ocean atlas
+# FishMigration — the TideCast atlas ("Explore the waters")
 
 Interactive 3D globe of where fish have been recorded, layered with Global Fishing Watch data on
 where fishing happens and where the ocean is protected.

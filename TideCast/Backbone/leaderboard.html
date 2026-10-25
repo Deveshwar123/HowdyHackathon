@@ -3,78 +3,125 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Tidecast — Leaderboard</title>
+  <title>TideCast — Leaderboard</title>
   <meta name="description" content="The top TideCast anglers this week and of all time.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="tidecast.css">
-  <script src="leaderboard.js"></script>
-  <script src="fish-points.js"></script>
+  <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="pages.css">
 </head>
-<body class="board-page">
-  <header class="top">
-    <a class="logo" href="./" aria-label="Tidecast home">
-      <svg viewBox="0 0 64 40" width="58" height="36" aria-hidden="true">
-        <defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#f7b28a"/><stop offset="1" stop-color="#e57a52"/></linearGradient></defs>
-        <path d="M3 11c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
-        <path d="M3 21c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
-        <path d="M3 31c7-7 14-7 21 0s14 7 21 0 11-6 16-2" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
-      </svg>
-      <span>TIDECAST</span>
-    </a>
-    <nav aria-label="Main">
-      <a href="../">Explore</a>
-      <a href="leaderboard.html" class="active" aria-current="page">Leaderboard</a>
-      <a href="./#program" id="nav-how">How it works</a>
-    </nav>
-  </header>
+<body class="page">
+  <header data-site-header data-glass></header>
 
-  <main>
-    <section id="board" aria-labelledby="board-title">
-      <header>
-        <div><small>TIDECAST · ANGLERS</small><h2 id="board-title">Leaderboard</h2></div>
-        <div class="tabs" role="tablist">
+  <main class="page-main">
+    <div class="page-head">
+      <div class="rise">
+        <span class="kicker">Leaderboard</span>
+        <h1 id="title">The week on the water.</h1>
+        <p class="lede">Every catch is measured from its photo and scored the same way: rarer fish and heavier fish climb higher.</p>
+      </div>
+      <div class="controls rise-2">
+        <div class="seg" role="tablist" aria-label="Period" id="period">
           <button role="tab" data-period="week" aria-selected="true">This week</button>
           <button role="tab" data-period="all" aria-selected="false">All time</button>
         </div>
-      </header>
-      <div class="podium" id="podium"></div>
-      <ol class="rows" id="rows"></ol>
-      <footer>
-        <a id="back" href="./">← Back to the globe</a>
-        <a class="cta small" href="../">EXPLORE THE WATERS →</a>
-      </footer>
-    </section>
+        <select class="select" id="species" aria-label="Species"><option value="">All species</option></select>
+      </div>
+    </div>
 
-    <section class="points-table" aria-labelledby="points-title">
-      <small class="kicker">POINTS PER SPECIES</small>
-      <h2 id="points-title">What every catch is worth</h2>
-      <ul id="points"></ul>
-    </section>
+    <section class="podium3" id="podium" aria-label="Top three"></section>
+
+    <div class="board-wrap">
+      <section class="card" aria-label="Rankings">
+        <div class="row-head" aria-hidden="true"><span>#</span><span></span><span>Angler</span><span class="h-sp">Species</span><span class="h-len">Length</span><span>Points</span></div>
+        <ol class="rows" id="rows"></ol>
+      </section>
+      <aside class="card card-pad rules-card rise-3">
+        <span class="kicker">How points work</span>
+        <h2>Rarer and heavier wins.</h2>
+        <ul id="rules"></ul>
+        <div class="reset" id="reset"></div>
+        <a class="btn btn-primary btn-block" href="catch.html">Log a catch</a>
+        <a class="btn btn-ghost btn-block" href="species.html">Species &amp; points</a>
+      </aside>
+    </div>
   </main>
 
+  <footer class="site-footer"><span>TideCast · Howdy Hack</span><span><a href="catch.html">Log a catch</a><a href="species.html">Species &amp; points</a><a href="/">Explore the waters</a></span></footer>
+
+  <script src="site.js"></script>
+  <script src="fish-art.js"></script>
   <script>
     (() => {
       const $ = (s) => document.querySelector(s);
       const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-      const all = (window.TIDECAST_LEADERBOARD || []).slice().sort((a, b) => (b.points || 0) - (a.points || 0));
-      const initials = (n) => String(n || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
-      const hue = (s) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
-      function render(period) {
-        const rows = all.filter((r) => period === 'all' || (r.period || 'week') === 'week');
-        $('#podium').innerHTML = rows.slice(0, 3).map((r, i) => `
-          <article><div class="medal">${i + 1}</div><strong>${esc(r.angler)}</strong><span>${esc(r.species)} · ${esc(r.measure)}</span><span>${esc(r.location)}</span><em>${(r.points || 0).toLocaleString()} pts</em></article>`).join('');
-        $('#rows').innerHTML = rows.slice(3).map((r, i) => `
-          <li><span class="rank">${i + 4}</span><span class="avatar" style="background:hsl(${hue(r.angler)} 45% 42%)">${esc(initials(r.angler))}</span>
-            <span class="who"><strong>${esc(r.angler)}</strong><span>${esc(r.species)} · ${esc(r.location)}</span></span>
-            <span class="measure">${esc(r.measure)}</span><span class="pts">${(r.points || 0).toLocaleString()} pts</span></li>`).join('');
-        document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.period === period)));
+      const params = new URLSearchParams(location.search);
+      const mine = +params.get('catch') || 0;
+      const state = { period: params.get('period') === 'all' ? 'all' : 'week', species: params.get('species') || '' };
+      const ago = (t) => {
+        const d = (Date.now() / 1000 - t) / 86400;
+        if (d < 1 / 24) return 'just now';
+        if (d < 1) return `${Math.round(d * 24)} h ago`;
+        if (d < 30) return `${Math.round(d)} day${Math.round(d) === 1 ? '' : 's'} ago`;
+        return new Date(t * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      };
+      const art = (r, cls = '') => `<div class="fish-art r-${(r.rarity || 'common').toLowerCase()} ${cls}">${r.photo ? `<img src="/catch-photos/${esc(r.photo)}" alt="${esc(r.species)} caught by ${esc(r.angler)}" loading="lazy">` : window.fishArt(r.species)}</div>`;
+      const rar = (r) => (r.rarity ? `<span class="rarity rarity-${r.rarity.toLowerCase()}">${esc(r.rarity)}</span>` : '');
+      const lb = (w) => (w >= 10 ? w.toFixed(1) : w.toFixed(2));
+      const sample = (r) => (r.sample ? ' <span class="tag" title="Demo entry">sample</span>' : '');
+
+      async function load() {
+        document.querySelectorAll('#period button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.period === state.period)));
+        $('#title').textContent = state.period === 'week' ? 'The week on the water.' : 'All-time greats.';
+        const q = new URLSearchParams({ period: state.period, limit: 50 });
+        if (state.species) q.set('species', state.species);
+        history.replaceState(null, '', `?${new URLSearchParams({ period: state.period, ...(state.species ? { species: state.species } : {}), ...(mine ? { catch: mine } : {}) })}`);
+        let d;
+        try { d = await (await fetch(`/api/leaderboard?${q}`)).json(); } catch { d = { rows: [] }; }
+        const rows = d.rows || [];
+        const pod = rows.slice(0, 3);
+        const order = [1, 0, 2].filter((i) => pod[i]);
+        $('#podium').innerHTML = order.map((i) => {
+          const r = pod[i];
+          const place = ['first', 'second', 'third'][i];
+          return `<article class="card pod ${place}${r.id === mine ? ' mine' : ''}">${art(r)}
+            <div class="pod-body"><div class="pod-top"><span class="medal">${i + 1}</span><span class="pod-pts">${r.points.toLocaleString()} <small>pts</small></span></div>
+            <h3>${esc(r.angler)}${sample(r)}</h3>
+            <div class="pod-top"><span class="measure">${lb(r.weight_lb)} lb · ${r.length_in} in</span>${rar(r)}</div>
+            <span class="meta">${esc(r.species)}${r.location ? ` · ${esc(r.location)}` : ''} · ${ago(r.created_at)}</span></div></article>`;
+        }).join('');
+        $('#podium').hidden = !pod.length;
+        $('#rows').innerHTML = rows.length ? rows.map((r, i) => `
+          <li class="row${r.id === mine ? ' mine' : ''}" style="animation-delay:${Math.min(i, 12) * 0.03}s" ${r.id === mine ? 'id="mine"' : ''}>
+            <span class="rank">${i + 1}</span>${art(r)}
+            <span class="who"><strong>${esc(r.angler)}${sample(r)}</strong><span>${esc(r.location || '—')} · ${ago(r.created_at)}</span></span>
+            <span class="sp">${esc(r.species)}${rar(r)}</span>
+            <span class="num len">${r.length_in}″<small>${lb(r.weight_lb)} lb</small></span>
+            <span class="pts">${r.points.toLocaleString()}<small>pts</small></span>
+          </li>`).join('') : `<li class="empty"><strong>No catches yet${state.period === 'week' ? ' this week' : ''}.</strong>Be the first: <a href="catch.html">log a catch</a>.</li>`;
+        if (mine) document.getElementById('mine')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const end = (d.week_start || 0) + 7 * 86400 - Date.now() / 1000;
+        const days = Math.floor(end / 86400), hours = Math.floor((end % 86400) / 3600);
+        $('#reset').innerHTML = end > 0 ? `<span>Weekly board resets in</span> <b>${days}d ${hours}h</b>` : '';
       }
-      document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => render(b.dataset.period)));
-      render('week');
-      $('#points').innerHTML = (window.TIDECAST_FISH || []).slice().sort((a, b) => b.points - a.points)
-        .map((f) => `<li><span class="name">${esc(f.name)}<span>${f.water === 'salt' ? 'saltwater' : 'freshwater'}</span></span><b>${f.points} pts</b></li>`).join('');
+
+      fetch('/api/species').then((r) => r.json()).then((d) => {
+        const sel = $('#species');
+        sel.innerHTML += (d.species || []).slice().sort((a, b) => a.name.localeCompare(b.name)).map((s) => `<option>${esc(s.name)}</option>`).join('');
+        sel.value = state.species;
+        const R = d.rules || {};
+        $('#rules').innerHTML = Object.entries(R.rarity || {}).map(([k, v]) => `<li><span class="rarity rarity-${k.toLowerCase()}">${k}</span><b>${v} pts</b></li>`).join('') +
+          `<li><span>Every pound</span><b>+${R.per_lb} pts</b></li><li><span>Longer than typical (trophy)</span><b>+${R.trophy} pts</b></li>`;
+      });
+      $('#period').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-period]');
+        if (!b) return;
+        state.period = b.dataset.period;
+        load();
+      });
+      $('#species').addEventListener('change', (e) => { state.species = e.target.value; load(); });
+      load();
     })();
   </script>
 </body>
