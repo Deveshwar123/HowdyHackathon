@@ -480,25 +480,36 @@ const groundMat = new THREE.ShaderMaterial({
       vec3 land = sat * 1.05 * sunCol;
       float wet = texture2D(uMask, lq).r * inL;
 
-      // Live water, brighter and more detailed as the camera comes down.
-      vec3 n = nrm(xz / 9.0 + uTime * vec2(0.012, 0.008)) + nrm(xz / 3.1 - uTime * vec2(0.01, 0.017))
-             + nrm(xz / 47.0 + uTime * vec2(-0.004, 0.003)) * 1.4 + nrm(xz / 260.0 + uTime * 0.002) * 2.0;
-      n = normalize(vec3(n.x, 4.2, n.z));
-      // The drop lands: rings travelling outward from the dive point (scroll-driven).
+      // Live water, like a real wind-rippled lake: deep navy, dense small waves layered over
+      // longer swells, and light only where the wave faces catch the sky.
+      // Wind-aligned: the wave pattern is stretched along the crests, so ripples read as long,
+      // regular lines rather than chop.
+      vec2 wa = mat2(0.87, -0.5, 0.5, 0.87) * xz;
+      vec2 st = vec2(wa.x / 2.4, wa.y);
+      vec2 w1 = uTime * vec2(0.012, 0.03), w2 = uTime * vec2(-0.008, 0.02);
+      vec3 n = nrm(st / 2.2 + w1) * 0.6 + nrm(st / 5.0 - w2) * 1.0 + nrm(st / 11.0 + w1 * 0.6) * 1.1
+             + nrm(xz / 34.0 - w2 * 0.3) * 0.9 + nrm(xz / 140.0 + uTime * 0.003) * 1.1;
+      n = normalize(vec3(n.x, 2.9, n.z));
+      // The drop lands: a few soft rings from the dive point (scroll-driven), fading as it settles.
       float r = length(xz);
       float behind = uRing - r;
       if (behind > 0.0 && uRingA > 0.0) {
-        float env = exp(-behind / (uRing * 0.35 + 0.5)) * uRingA;
-        n.xz += normalize(xz + 1e-4) * sin(behind * 6.2831 / uWave) * env * 0.55;
+        float env = exp(-behind / (uRing * 0.3 + 0.5)) * uRingA;
+        n.xz += normalize(xz + 1e-4) * sin(behind * 6.2831 / uWave) * env * 0.22;
         n = normalize(n);
       }
       vec3 V = normalize(uCam - vW);
-      float fres = 0.04 + 0.96 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
-      float tint = texture2D(uNormals, xz / 900.0).r;
-      vec3 body = mix(vec3(0.03, 0.15, 0.2), vec3(0.06, 0.27, 0.3), tint);
-      vec3 live = mix(body, skyColor(reflect(-V, n), 0.0), fres);
+      vec3 Rv = reflect(-V, n);
+      float ndv = max(dot(n, V), 0.0);
+      float slope = length(n.xz);
+      float tint = texture2D(uNormals, xz / 700.0).r;
+      // Deep water colour, and the sky it reflects: dark blue overhead, pale steel-blue low down.
+      vec3 body = mix(vec3(0.004, 0.022, 0.055), vec3(0.008, 0.038, 0.085), tint);
+      vec3 skyR = mix(vec3(0.34, 0.47, 0.6), vec3(0.025, 0.08, 0.17), smoothstep(0.05, 0.9, Rv.y));
+      float refl = 0.15 + 0.42 * smoothstep(0.1, 0.55, slope) + 0.4 * pow(1.0 - ndv, 4.0);
+      vec3 live = mix(body, skyR, clamp(refl, 0.0, 1.0));
       vec3 Ls = normalize(vec3(0.35, 0.7, -0.6));
-      live += vec3(1.0, 0.86, 0.65) * pow(max(dot(reflect(-V, n), Ls), 0.0), 900.0) * 1.0;
+      live += vec3(0.75, 0.85, 0.95) * pow(max(dot(Rv, Ls), 0.0), 380.0) * 0.35;
       float detail = 1.0 - smoothstep(250.0, 4500.0, uCamH);
       vec3 waterCol = mix(land * 1.12 + vec3(0.0, 0.01, 0.015), live, detail);
       vec3 col = mix(land, waterCol, wet);
@@ -547,7 +558,7 @@ function placeSurface(t) {
   // Ring sizes follow the camera height, so the drop reads the same at every altitude.
   u.uRing.value = dist * 0.42 * (0.25 + seg([0.47, 0.6]));
   u.uWave.value = Math.max(0.22, dist * 0.035);
-  u.uRingA.value = seg([0.47, 0.5]);
+  u.uRingA.value = bell(0.47, 0.5, 0.56, 0.61);
 }
 
 // ===========================================================================
