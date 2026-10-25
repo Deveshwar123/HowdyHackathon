@@ -86,6 +86,55 @@
     S.model = !!(d.model && d.model.available);
     S.modelWhy = (d.model && d.model.reason) || '';
     showAi(!!d.ai);
+    // The length model comes first: offer to install it before the knuckle / API-key options.
+    if (!S.model && store.get('tc-model-skip') !== '1') askModel();
+  });
+
+  // ---- "Install the length model?" --------------------------------------------------
+  const ask = { box: $('#model-ask'), status: $('#model-status'), install: $('#model-install'), skip: $('#model-skip') };
+  function askModel() {
+    ask.box.hidden = false;
+    $('#keybox').hidden = true;                 // the other options come after this choice
+    ask.install.focus();
+  }
+  function closeAsk() {
+    ask.box.hidden = true;
+    showAi(S.ai);                               // brings back the Gemini key box if there's no key
+  }
+  function askStatus(text, kind) {
+    ask.status.hidden = !text;
+    ask.status.textContent = text || '';
+    ask.status.className = `small model-status${kind ? ` ${kind}` : ''}`;
+  }
+  // Changed your mind? The status pill reopens the offer.
+  el.aiPill.addEventListener('click', () => { if (!S.model) askModel(); });
+  el.aiPill.title = 'Install the length model';
+  ask.skip.addEventListener('click', () => {
+    store.set('tc-model-skip', '1');
+    closeAsk();
+  });
+  ask.install.addEventListener('click', async () => {
+    ask.install.disabled = true;
+    ask.skip.textContent = 'Use knuckles for now';
+    askStatus('Installing the length model… this can take a few minutes.', 'busy');
+    let d = await api('/api/catch/model/install', {}).catch(() => null);
+    while (d && d.install && d.install.state === 'installing') {
+      await new Promise((r) => setTimeout(r, 2500));
+      d = await fetch('/api/catch/model').then((r) => r.json()).catch(() => null);
+    }
+    const st = d && d.install ? d.install.state : 'failed';
+    if (st === 'done' || (d && d.model && d.model.available)) {
+      S.model = true;
+      askStatus('Installed. The length model now measures every catch.', '');
+      showAi(S.ai);
+      setTimeout(closeAsk, 1200);
+      return;
+    }
+    ask.install.disabled = false;
+    ask.install.textContent = 'Try again';
+    askStatus(st === 'needs_files'
+      ? 'The packages are installed, but the trained model files aren’t on this computer yet (TideCast/Catch/fish_length/artifacts). Ask your team to add them, then try again.'
+      : (d && d.install && d.install.log) || 'The install didn’t finish. Check the internet connection and try again.', 'bad');
   });
 
   // Saving a Gemini key from the page (stored in TideCast/.env on the server's computer).

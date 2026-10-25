@@ -329,6 +329,50 @@ def model_info():
             "knuckle_length_err_pct": round(100 * measure.LENGTH_ERROR_FRAC)}
 
 
+# ---- Installing the length model from the page --------------------------------
+# The server only listens on 127.0.0.1, so this runs on the angler's own computer, and it only
+# ever runs one fixed command: pip install -r requirements-model.txt.
+_install = {"state": "idle", "log": ""}
+
+
+def _run_install():
+    import importlib
+    import subprocess
+    req = os.path.join(HERE, "requirements-model.txt")
+    cmd = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", req]
+    _install.update(state="installing", log="Installing the length model's packages (a few minutes)...")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        if r.returncode != 0 and "--user" not in cmd:     # e.g. no permission for the system site
+            r = subprocess.run(cmd + ["--user"], capture_output=True, text=True, timeout=3600)
+        importlib.invalidate_caches()
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout or "").strip().splitlines()[-3:]
+            _install.update(state="failed", log="pip couldn't install the packages: " + " ".join(tail))
+            return
+    except Exception as e:  # pip missing, timeout...
+        _install.update(state="failed", log=f"Couldn't run pip ({e}).")
+        return
+    st = length_ai.status()
+    if st["available"]:
+        length_ai.warm_up()
+        _install.update(state="done", log="The length model is installed.")
+    else:
+        _install.update(state="needs_files", log=st["reason"])
+
+
+def model_install(_payload=None):
+    if _install["state"] != "installing":
+        import threading
+        threading.Thread(target=_run_install, daemon=True).start()
+        _install.update(state="installing", log="Starting...")
+    return 200, {"ok": True, **model_state()[1]}
+
+
+def model_state(_query=None):
+    return 200, {"ok": True, "model": model_info(), "install": dict(_install)}
+
+
 def stats(_query=None):
     s = db.stats()
     return 200, {"ok": True, **s, "species_known": len(FISH_DB), "ai": bool(vision.api_key()),

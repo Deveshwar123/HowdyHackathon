@@ -342,6 +342,7 @@ CATCH_ROUTES = {
     "/api/catch/measure": catch.measure_points,
     "/api/catch/submit": catch.submit,
     "/api/catch/key": catch.set_key,
+    "/api/catch/model/install": catch.model_install,
 }
 
 
@@ -442,6 +443,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(*reversed(catch.leaderboard(query)))
             if url.path == "/api/species":
                 return self.send_json(*reversed(catch.species(query)))
+            if url.path == "/api/catch/model":
+                return self.send_json(catch.model_state(query)[1])
             if url.path == "/api/stats":
                 return self.send_json(*reversed(catch.stats(query)))
             if url.path.startswith("/catch-photos/"):

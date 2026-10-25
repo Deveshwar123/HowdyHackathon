@@ -194,6 +194,22 @@
     </section>
   </main>
 
+  <!-- First visit without the length model: offer to install it before anything else. -->
+  <div class="model-ask" id="model-ask" hidden role="dialog" aria-modal="true" aria-labelledby="model-ask-title">
+    <div class="model-card card">
+      <span class="kicker">Automatic measuring</span>
+      <h2 id="model-ask-title">Install the TideCast length model?</h2>
+      <p class="muted">It measures your fish straight from the photo: no knuckles to mark and no API key.
+        It runs on this computer; the first install downloads a few GB.</p>
+      <p class="small model-status" id="model-status" hidden></p>
+      <div class="model-actions">
+        <button class="btn btn-primary" type="button" id="model-install">Install the length model</button>
+        <button class="btn btn-ghost" type="button" id="model-skip">Not now</button>
+      </div>
+      <p class="muted small fine" id="model-skip-note">Not now: measure against your knuckles instead (and add a Gemini key to place the points for you).</p>
+    </div>
+  </div>
+
   <footer class="site-footer"><span>TideCast · Howdy Hack</span><span><a href="leaderboard.html">Leaderboard</a><a href="species.html">Species &amp; points</a><a href="/">Explore the waters</a></span></footer>
 
   <script src="site.js"></script>
