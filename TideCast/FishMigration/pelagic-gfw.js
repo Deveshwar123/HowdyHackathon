@@ -224,7 +224,20 @@
   const dateRange = () => `${state.start},${state.end}`;
   const bboxPolygon = ([w, s, e, n]) => ({ type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] });
   const coordName = (lon, lat) => `${Math.abs(lat).toFixed(1)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(1)}°${lon >= 0 ? 'E' : 'W'}`;
-  const species = () => window.PELAGIC_SPECIES || [];
+  // The atlas guide plus every TideCast species (served with species.js), searchable by angler
+  // names too ("redfish" finds Red drum).
+  let guideCache = null;
+  const species = () => {
+    if (guideCache) return guideCache;
+    const base = (window.PELAGIC_SPECIES || []).map((sp) => ({ ...sp }));
+    for (const x of window.TIDECAST_GUIDE_EXTRA || []) {
+      const have = base.find((sp) => sp.scientific === x.scientific);
+      if (have) have.aka = [...(have.aka || []), ...x.aka];
+      else base.push(x);
+    }
+    if (window.PELAGIC_SPECIES) guideCache = base;
+    return base;
+  };
   const inBox = (lon, lat, [w, s, e, n]) => Number.isFinite(lon) && Number.isFinite(lat) && lat >= s && lat <= n &&
     (w <= e ? lon >= w && lon <= e : lon >= w || lon <= e);
 
@@ -232,6 +245,15 @@
     const el = $(`[data-status="${id}"]`);
     if (el) el.textContent = text;
   }
+
+  // The server explains failures in JSON ({error}); show that rather than a bare status code.
+  const httpError = async (r) => {
+    let msg = '';
+    try { const b = await r.clone().json(); msg = b.error || b.message || ''; } catch { /* not JSON */ }
+    const err = new Error(msg || `the service answered ${r.status}${r.status >= 500 ? ' (try again in a moment)' : ''}`);
+    err.status = r.status;
+    return err;
+  };
 
   const gfwJSON = async (path, options) => {
     if (!state.gfwReady) throw new Error('Global Fishing Watch is not connected');
@@ -241,7 +263,7 @@
     try { body = JSON.parse(text); } catch { body = { error: text.slice(0, 200) }; }
     if (!r.ok) {
       const detail = body.error || body.message || (body.messages && body.messages.map((m) => m.detail || m.title || m).join('; '));
-      const err = new Error(typeof detail === 'string' && detail ? detail : `HTTP ${r.status}`);
+      const err = new Error(typeof detail === 'string' && detail ? detail : `Global Fishing Watch answered ${r.status}`);
       err.status = r.status;
       throw err;
     }
@@ -314,9 +336,9 @@
         return r.arrayBuffer();
       }
       if (r.status === 404 && resolved !== undefined) return null; // known dataset, empty tile
-      if (r.status !== 404) throw new Error(`HTTP ${r.status}`);
+      if (r.status !== 404) throw await httpError(r);
     }
-    throw new Error('HTTP 404 for every dataset name');
+    throw new Error('Global Fishing Watch has no such layer');
   }
 
   function drawTile(features, def) {
@@ -608,7 +630,7 @@
   function renderFishLists() {
     const q = ($('#px-species-filter').value || '').toLowerCase();
     $('#px-species-list').innerHTML = species()
-      .filter((sp) => `${sp.name} ${sp.scientific} ${sp.group}`.toLowerCase().includes(q))
+      .filter((sp) => `${sp.name} ${sp.scientific} ${sp.group} ${(sp.aka || []).join(' ')}`.toLowerCase().includes(q))
       .map((sp) => fishRow(sp.scientific, sp.name, `<i>${esc(sp.scientific)}</i> · ${esc(sp.group)}`))
       .join('') || '<p class="px-muted">No match in the guide — add it below as any species.</p>';
     $('#px-custom').innerHTML = state.custom.map((name) => fishRow(name, name, 'Added by you · OBIS')).join('');
@@ -641,7 +663,7 @@
       const wkt = `POLYGON((${bboxPolygon(a.bbox).coordinates[0].map((p) => p.join(' ')).join(',')}))`;
       const job = Promise.all(FISH_TAXA.map(async (taxon) => {
         const r = await fetch(`${OBIS}/checklist?${new URLSearchParams({ scientificname: taxon, geometry: wkt, size: 200 })}`);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        if (!r.ok) throw await httpError(r);
         return (await r.json()).results || [];
       })).then((lists) => {
         const counts = new Map();
@@ -1311,8 +1333,12 @@
         for (const taxon of FISH_TAXA) selectFish(taxon, fishInfo(taxon).name);
         return;
       }
+      // Area-box rows toggle: tap to put a fish on the map, tap again to take it off.
       const fish = e.target.closest('[data-area-fish]');
-      if (fish) selectFish(fish.dataset.areaFish, fish.dataset.name);
+      if (fish) {
+        if (state.sel.fish.has(fish.dataset.areaFish)) unselectFish(fish.dataset.areaFish);
+        else selectFish(fish.dataset.areaFish, fish.dataset.name);
+      }
       const zoom = e.target.closest('[data-zoom-area]');
       if (zoom) zoomTo(state.areas.find((a) => a.id === zoom.dataset.zoomArea).bbox);
     });

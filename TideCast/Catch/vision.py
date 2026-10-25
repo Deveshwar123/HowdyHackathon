@@ -15,6 +15,7 @@ import time
 import urllib.error
 import urllib.request
 
+import net  # noqa: F401  (trusted certificates for the Gemini calls)
 from fish_data import FISH_DB
 
 # GEMINI_MODEL (comma-separated) overrides the models tried, in order.

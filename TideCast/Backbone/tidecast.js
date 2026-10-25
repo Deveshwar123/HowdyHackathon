@@ -136,11 +136,15 @@ const earthMat = new THREE.ShaderMaterial({
     uPin: { value: new THREE.Vector2(HOME.lon, HOME.lat) }, uTarget: { value: new THREE.Vector2(HOME.lon, HOME.lat) },
     uAltKm: { value: 10000 }, uPing: { value: 0 }, uPingA: { value: 0 }, uPulse: { value: 0 }, uFound: { value: 0 },
     uHaze: { value: 0 }, uSun: { value: SUN }, uTime: { value: 0 },
+    uCamObj: { value: new THREE.Vector3(0, 0, 3) },
+    // The dive point and its east/north directions (object space), for exact local positions.
+    uTObj: { value: new THREE.Vector3(0, 0, 1) }, uTE: { value: new THREE.Vector3(1, 0, 0) }, uTN: { value: new THREE.Vector3(0, 1, 0) },
   },
   vertexShader: /* glsl */ `
-    varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vNorth;
+    varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vNorth; varying vec3 vObj;
     void main() {
       vUv = uv;
+      vObj = position;
       vN = normalize(normalMatrix * normal);
       vNorth = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));
       vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -151,8 +155,8 @@ const earthMat = new THREE.ShaderMaterial({
     uniform sampler2D uDay, uNight, uRelief, uWater, uRegion, uLakeSat, uCont, uContMask;
     uniform vec4 uRegionB, uLakeB, uContB; uniform vec2 uPin, uTarget; uniform float uContLand;
     uniform float uRegionMix, uLakeMix, uSatReady, uAltKm, uPing, uPingA, uPulse, uFound, uHaze, uTime;
-    uniform vec3 uSun;
-    varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vNorth;
+    uniform vec3 uSun, uCamObj, uTObj, uTE, uTN;
+    varying vec2 vUv; varying vec3 vN; varying vec3 vPos; varying vec3 vNorth; varying vec3 vObj;
     float edgeMask(vec2 q, float f) {
       return smoothstep(0.0, f, q.x) * smoothstep(0.0, f, 1.0 - q.x) * smoothstep(0.0, f, q.y) * smoothstep(0.0, f, 1.0 - q.y);
     }
@@ -161,11 +165,25 @@ const earthMat = new THREE.ShaderMaterial({
       vec3 V = normalize(-vPos);
       vec3 N = normalize(vN);
       vec3 L = normalize(uSun);
+      // The mesh is made of flat facets ~150 km wide; up close that shifts the picture by
+      // hundreds of metres. Find where this pixel's ray meets the true sphere instead, so the
+      // imagery sits exactly where the water close-up expects it.
+      vec3 rd = normalize(vObj - uCamObj);
+      float bq = dot(uCamObj, rd), cq0 = dot(uCamObj, uCamObj) - 1.0, disc = bq * bq - cq0;
+      vec3 sp = disc > 0.0 ? normalize(uCamObj + rd * (-bq - sqrt(disc))) : normalize(vObj);
+      // Same lon/lat -> uv mapping as THREE.SphereGeometry.
+      vec2 vUv = vec2(fract(atan(sp.z, -sp.x) / 6.2831853), 1.0 - acos(clamp(sp.y, -1.0, 1.0)) / 3.1415927);
       vec2 ll = vec2(vUv.x * 360.0 - 180.0, vUv.y * 180.0 - 90.0);
+      // GPU atan/acos are only good to ~1e-4 rad (~600 m), so near the water measure metres from
+      // the dive point instead: the same flat mapping the water close-up uses, so they match.
+      vec3 dd = sp - uTObj;
+      vec2 en = vec2(dot(dd, uTE), dot(dd, uTN)) * 6371000.0;
+      vec2 llNear = uTarget + vec2(en.x / (${M_PER_DEG}.0 * cos(radians(uTarget.y))), en.y / ${M_PER_DEG}.0);
+      vec2 llFine = mix(llNear, ll, smoothstep(0.02, 0.04, length(dd)));
 
       // Satellite imagery for the dive (lon/lat-aligned decals).
-      vec2 rq = (ll - uRegionB.xy) / (uRegionB.zw - uRegionB.xy);
-      vec2 lq = (ll - uLakeB.xy) / (uLakeB.zw - uLakeB.xy);
+      vec2 rq = (llFine - uRegionB.xy) / (uRegionB.zw - uRegionB.xy);
+      vec2 lq = (llFine - uLakeB.xy) / (uLakeB.zw - uLakeB.xy);
       float rIn = edgeMask(rq, 0.22) * uRegionMix * uSatReady;
       float lIn = edgeMask(lq, 0.08) * uLakeMix * uSatReady;
       float decal = max(rIn, lIn);
@@ -210,7 +228,7 @@ const earthMat = new THREE.ShaderMaterial({
 
       // Your location pings, slowly: a scroll-driven wave that travels out to the nearest water,
       // plus ambient sonar pulses sized to the view.
-      float dist = kmTo(ll, uPin);
+      float dist = kmTo(llFine, uPin);
       float ring = exp(-pow((dist - uPing) / max(uAltKm * 0.006, 0.12), 2.0)) * uPingA * 0.75;
       float reach = clamp(uAltKm * 0.3, 4.0, 1500.0);
       for (int k = 0; k < 3; k++) {
@@ -219,7 +237,7 @@ const earthMat = new THREE.ShaderMaterial({
       }
       float core = exp(-pow(dist / max(uAltKm * 0.005, 0.02), 2.0)) * uPulse;
       // The water it found glows.
-      float wd = kmTo(ll, uTarget);
+      float wd = kmTo(llFine, uTarget);
       float found = exp(-pow(wd / max(uAltKm * 0.006, 0.03), 2.0)) * uFound;
       found += exp(-pow((wd - uAltKm * 0.02 * (0.6 + 0.4 * sin(uTime * 1.2))) / max(uAltKm * 0.002, 0.01), 2.0)) * uFound * 0.6;
       col += (ring + core * 1.4 + found * 1.2) * vec3(0.95, 0.04, 0.07) * 1.2;
@@ -410,6 +428,15 @@ function placeGlobe(dt, t) {
   gCamera.near = Math.max(1e-6, (d - 1) * 0.25);
   gCamera.far = d + 1.2;
   gCamera.updateProjectionMatrix();
+  tilt.updateMatrixWorld(true);
+  earthMat.uniforms.uCamObj.value.copy(gCamera.position);
+  earth.worldToLocal(earthMat.uniforms.uCamObj.value);
+  {
+    const tg = earthMat.uniforms.uTarget.value, th = (90 - tg.y) * D2R, ph = (tg.x + 180) * D2R;
+    earthMat.uniforms.uTObj.value.set(-Math.cos(ph) * Math.sin(th), Math.cos(th), Math.sin(ph) * Math.sin(th));
+    earthMat.uniforms.uTE.value.set(Math.sin(ph), 0, Math.cos(ph));
+    earthMat.uniforms.uTN.value.set(Math.cos(ph) * Math.cos(th), Math.sin(th), -Math.sin(ph) * Math.cos(th));
+  }
 
   const altKm = (d - 1) * EARTH_KM;
   globeState.altKm = altKm;
