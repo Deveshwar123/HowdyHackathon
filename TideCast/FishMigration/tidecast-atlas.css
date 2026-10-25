@@ -1,0 +1,138 @@
+/* TideCast theme for the atlas ("Explore the waters"): the same navy / ocean / coral design as the
+   rest of TideCast. Loaded last, after the atlas, explorer (pelagic-gfw.css) and near-me styles. */
+:root {
+  --ink: #f3eadc; --muted: #9fb0bd; --line: rgba(255, 255, 255, .1); --soft: rgba(255, 255, 255, .05); --paper: #0b1824;
+  color-scheme: dark;
+  --tc-panel: rgba(9, 24, 37, .9);
+  --tc-card: rgba(255, 255, 255, .04);
+  --tc-line: rgba(255, 255, 255, .1);
+  --tc-line-2: rgba(255, 255, 255, .18);
+  --tc-hover: rgba(255, 255, 255, .06);
+  --tc-input: rgba(3, 12, 20, .55);
+  --tc-coral: #ef9168; --tc-coral-hi: #f8b994;
+  --tc-ink: #f3eadc; --tc-soft: #d8d0c4; --tc-muted: #9fb0bd;
+}
+* { scrollbar-color: rgba(255, 255, 255, .22) transparent; }
+body { background: #06121e; color: var(--tc-ink); font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+:is(button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible) { outline-color: var(--tc-coral); }
+input[type=checkbox] { accent-color: var(--tc-coral); }
+h1, h2, .px-fish-head h3, .modal h2 { font-family: 'Newsreader', Georgia, serif; font-weight: 400; letter-spacing: -.01em; }
+
+/* ---- Header: the shared TideCast bar replaces the atlas header ---------------------- */
+body .site-header { position: fixed; height: 72px; padding: 0 20px; background: rgba(6, 18, 30, .92); backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3); border-bottom: 1px solid var(--tc-line); }
+body .site-header .logo, body .site-header nav { background: none !important; box-shadow: none !important; backdrop-filter: none !important; }
+body .site-header .logo svg { width: 40px; }
+body .site-header .logo span { font-size: 18px; }
+body .site-header nav { padding: 0; margin: 0 0 0 auto; align-self: center; }
+@media (max-width: 860px) { body .site-header nav { background: var(--glass-strong, rgba(10, 26, 40, .96)) !important; padding: 10px; } }
+main > header { position: fixed; z-index: 6; left: 330px; bottom: 18px; height: auto; padding: 0; gap: 0; border: 0; background: none; }
+main > header > :not(.about) { display: none !important; }
+main > header .about { padding: 8px 14px; border-radius: 999px; background: rgba(6, 18, 30, .82); color: var(--tc-soft); box-shadow: inset 0 0 0 1px var(--tc-line); backdrop-filter: blur(10px); font-size: 12px; }
+main > header .about:hover { color: #fff; }
+.workspace { height: calc(100dvh - 72px); margin-top: 72px; }
+
+/* ---- Sidebar + explorer panels -------------------------------------------------------- */
+/* The atlas styles every <header> as its top bar; panel headings are headers too. */
+.px-step > header, .px-card > header, #px-areabox > header, #nm-panel header, .detail-heading, .modal header {
+  height: auto; padding: 0; background: transparent; border: 0; gap: 12px; }
+#nm-panel header { padding: 12px 0 8px; border-bottom: 1px solid var(--tc-line); }
+.sidebar, .details { background: linear-gradient(180deg, #0b1d2c, #08182a); border-color: var(--tc-line); color: var(--tc-ink); }
+#px-left, #px-right { color: var(--tc-ink); font-size: 12.5px; }
+.px-step { border-bottom-color: var(--tc-line); padding: 18px 20px 20px; }
+.px-step > header b { border-color: var(--tc-line-2); color: var(--tc-soft); font-weight: 500; }
+.px-step.done > header b { background: var(--tc-coral); border-color: var(--tc-coral); color: #16212b; }
+.px-step > header strong { font-family: 'Newsreader', Georgia, serif; font-weight: 400; font-size: 21px; letter-spacing: -.01em; }
+.px-step > header small, .px-muted, .px-sub, .px-eyebrow, .px-inline, .px-dates label, .px-period, .px-check small, .px-place small,
+.px-card > header small, .px-vessel small, .px-taxon small, .px-zone small, .px-zone span, .px-facts dt, .px-fish-head small,
+.px-areafish span small, .px-areafish > small, #px-areabox > header small, .px-legend-row small, .px-bar small, #px-right h5 small,
+.px-actions small, .px-credit, .px-step summary small { color: var(--tc-muted); }
+.px-sub, .px-eyebrow { letter-spacing: .18em; font-weight: 500; }
+.px-step details, .px-list, .px-place, .px-vessel, .px-taxon, .px-areafish, .px-right-head { border-color: var(--tc-line); }
+.px-step summary { color: var(--tc-ink); }
+.px-inline select, .px-dates input, .px-filter, .px-search input, .location-search form, .search, .filters select, .region-select, .region-select select, .location-selection select {
+  background: var(--tc-input); color: var(--tc-ink); border: 1px solid var(--tc-line-2); border-radius: 10px; }
+.px-inline select, .px-dates input, .px-filter, .px-search input { padding: 8px 10px; font-size: 12px; }
+.px-dates input { color-scheme: dark; }
+.px-search input:focus, .px-filter:focus, .px-inline select:focus, .px-dates input:focus { outline: none; border-color: var(--tc-coral); box-shadow: 0 0 0 3px rgba(239, 145, 104, .18); }
+.px-search button, .px-primary { background: linear-gradient(180deg, var(--tc-coral-hi), var(--tc-coral) 70%, #e47f55); color: #16212b; border-radius: 999px; font-weight: 700; box-shadow: 0 6px 18px rgba(239, 145, 104, .28); }
+.px-search button { padding: 8px 14px; }
+.px-primary { padding: 12px 14px; letter-spacing: .08em; text-transform: uppercase; font-size: 11.5px; }
+.px-primary:disabled { background: rgba(255, 255, 255, .1); color: var(--tc-muted); box-shadow: none; }
+.px-primary.pulse { animation: tc-pulse 1.8s infinite; }
+@keyframes tc-pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 145, 104, .55); } 70% { box-shadow: 0 0 0 10px rgba(239, 145, 104, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 145, 104, 0); } }
+.px-ghost { border: 0; border-radius: 999px; background: rgba(255, 255, 255, .06); box-shadow: inset 0 0 0 1px var(--tc-line-2); color: var(--tc-ink); }
+.px-ghost:hover { background: rgba(255, 255, 255, .1); }
+.px-presets button { background: rgba(255, 255, 255, .04); border-color: var(--tc-line-2); color: var(--tc-soft); padding: 5px 11px; transition: border-color .2s, color .2s, background .2s; }
+.px-presets button:hover { border-color: var(--tc-coral); color: #fff; background: rgba(239, 145, 104, .1); }
+.px-area { border-color: var(--tc-line-2); border-radius: 12px; background: var(--tc-card); }
+.px-area:hover { border-color: rgba(255, 255, 255, .3); }
+.px-area.active { border-color: var(--tc-coral); box-shadow: inset 3px 0 0 var(--tc-coral); }
+.px-area b, .px-card > header b, #px-areabox > header b, .px-mini { color: #10212d; border-color: rgba(0, 0, 0, .25); }
+.px-area button, .px-right-head button, .px-card > header button, #px-areabox > header button { color: var(--tc-muted); }
+.px-area button:hover, .px-right-head button:hover, #px-areabox > header button:hover, .px-back:hover { color: #fff; }
+.px-actions { background: rgba(6, 18, 30, .96); border-top-color: var(--tc-line); }
+.px-token { background: rgba(255, 207, 122, .1); border-color: rgba(255, 207, 122, .35); color: #ffe2ad; border-radius: 10px; }
+.px-selectall { border-color: var(--tc-line-2); border-radius: 12px; background: var(--tc-card); }
+.px-fish, .px-rowbtn { border-radius: 8px; }
+.px-fish:hover, .px-rowbtn:hover, .px-rowbtn.focus, .px-vessel:hover, .px-areafish:hover { background: var(--tc-hover); }
+.px-fish.focus, .px-areafish.focus { background: rgba(239, 145, 104, .1); border-left-color: var(--tc-coral); }
+.px-fish:focus-visible { outline-color: var(--tc-coral); }
+.px-taxon b { border-color: var(--tc-line-2); }
+.px-taxon:hover b { background: var(--tc-coral); color: #16212b; border-color: var(--tc-coral); }
+.px-back { color: var(--tc-soft); }
+.px-desc, .px-facts dd { color: var(--tc-soft); }
+.px-fish-head i { color: var(--tc-muted); }
+.px-insight { background: rgba(255, 255, 255, .04); border-left-color: rgba(255, 255, 255, .25); }
+.px-insight.warn, .px-warn { background: rgba(255, 143, 134, .1); border-left-color: #ff8f86; color: #ffc4be; }
+.px-insight.ok { border-left-color: #8fe0b0; }
+#px-right h5 { color: var(--tc-soft); letter-spacing: .16em; }
+#px-detail a, .px-step a { color: var(--tc-coral-hi); }
+
+/* Floating cards over the map */
+#px-right, #px-areabox, .px-map-search, #px-basemap, #px-legend, .map-controls, .record-popup, .timeline, .area-chip, .layer-button {
+  background: rgba(8, 22, 34, .88); color: var(--tc-ink); border: 1px solid var(--tc-line); border-radius: 18px;
+  backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2); box-shadow: 0 18px 50px rgba(0, 0, 0, .4); }
+#px-right { border-radius: 20px; }
+.px-right-head { background: rgba(8, 22, 34, .98); }
+.px-card { border-color: var(--tc-line); border-radius: 14px; background: var(--tc-card); }
+#px-areabox { border-top: 4px solid var(--area); }
+.px-map-search { border-radius: 999px; padding: 4px 4px 4px 10px; }
+.px-map-search input { background: none; border: 0; color: var(--tc-ink); }
+#px-basemap { border-radius: 999px; padding: 3px; }
+#px-basemap button { border: 0; border-radius: 999px; color: var(--tc-soft); padding: 7px 12px; }
+#px-basemap button.active { background: var(--tc-ink); color: #10212d; }
+#px-basemap label { color: var(--tc-soft); }
+#px-legend { border-radius: 14px; }
+#px-legend strong { color: var(--tc-muted); }
+#px-hint { background: rgba(6, 18, 30, .86); color: var(--tc-ink); box-shadow: inset 0 0 0 1px rgba(239, 145, 104, .45); backdrop-filter: blur(8px); }
+.map-controls { border-radius: 14px; overflow: hidden; }
+.map-controls button { border-bottom-color: var(--tc-line); color: var(--tc-ink); }
+.map-controls button:hover { background: var(--tc-hover); }
+.map-area { background: radial-gradient(120% 80% at 60% 20%, #0f2a40, #050d16 70%); }
+
+/* Atlas modal (Data & sources) */
+.modal-shade { background: rgba(2, 8, 14, .65); backdrop-filter: blur(6px); }
+.modal { background: rgba(10, 26, 40, .97); color: var(--tc-ink); border: 1px solid var(--tc-line); border-radius: 24px; box-shadow: 0 40px 100px rgba(0, 0, 0, .5); }
+.modal p, .explain p { color: var(--tc-soft); }
+.close { color: var(--tc-ink); }
+.upload { background: rgba(255, 255, 255, .04); border-color: var(--tc-line-2); border-radius: 14px; }
+.toggle-row { border-color: var(--tc-line); }
+
+/* Spots near me (near-me.js) */
+#nm { top: 86px; left: calc(310px + (100vw - 310px) / 2); color: var(--tc-ink); font-family: inherit; }
+@media (min-width: 1600px) { #nm { left: calc(330px + (100vw - 330px) / 2); } }
+@media (max-width: 1100px) { #nm { left: calc(275px + (100vw - 275px) / 2); } }
+#nm-open { background: linear-gradient(180deg, var(--tc-coral-hi), var(--tc-coral) 70%, #e47f55); color: #16212b; border: 0; box-shadow: 0 10px 28px rgba(239, 145, 104, .35); padding: 10px 18px; }
+#nm-open:hover { border: 0; transform: translateY(-1px); }
+#nm-panel { background: rgba(8, 22, 34, .95); border: 1px solid var(--tc-line); border-radius: 20px; backdrop-filter: blur(16px); box-shadow: 0 30px 80px rgba(0, 0, 0, .5); padding: 0 16px 12px; }
+#nm-panel header { background: transparent; border-bottom-color: var(--tc-line); }
+#nm-panel header strong { font-family: 'Newsreader', Georgia, serif; font-weight: 400; font-size: 20px; }
+#nm-close { color: var(--tc-muted); }
+#nm-status { color: var(--tc-muted); }
+#nm-list button { border-bottom-color: var(--tc-line); border-radius: 10px; padding: 10px 8px; }
+#nm-list button:hover { background: var(--tc-hover); }
+.nm-head em { color: var(--tc-coral-hi); }
+.nm-kind, .nm-credit { color: var(--tc-muted); }
+.nm-fish i { background: rgba(120, 190, 255, .1); color: #d6e6f4; }
+.nm-fish b { color: var(--tc-coral-hi); }
+@media (max-width: 880px) { main > header { left: 16px; bottom: 76px; } #nm { left: 50%; top: auto; bottom: 74px; } #nm-panel { position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%); max-height: 60vh; } }

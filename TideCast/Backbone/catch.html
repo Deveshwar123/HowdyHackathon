@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>TideCast — Log a catch</title>
+  <meta name="description" content="Photograph your catch with your knuckles in view. TideCast identifies the species, measures it against your hand and weighs it.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="catch.css">
+</head>
+<body class="page">
+  <header data-site-header data-glass></header>
+
+  <main class="page-main">
+    <div class="page-head">
+      <div class="rise">
+        <span class="kicker">Log a catch</span>
+        <h1>Weigh it with<br>your hand.</h1>
+        <p class="lede">Hold your catch with your knuckles facing the camera. TideCast identifies the species,
+          measures it against your knuckles and works out its weight. No scale, no tape.</p>
+      </div>
+      <div class="ai-pill rise-2" id="ai-pill" hidden></div>
+    </div>
+
+    <div class="catch-grid">
+      <!-- The photo stage -->
+      <section class="stage card rise-2" id="stage" aria-label="Your photo">
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept="image/*" hidden>
+          <span class="drop-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48"><rect x="6" y="12" width="36" height="26" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="24" cy="25" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 12l3-5h8l3 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          </span>
+          <strong>Drop your catch photo here</strong>
+          <span class="muted">or <u>choose a photo</u> · take one on your phone</span>
+          <span class="drop-note">JPEG, PNG or HEIC (Safari) · your photo is resized to 1024 px before upload</span>
+        </label>
+
+        <div class="photo" id="photo" hidden>
+          <div class="photo-box" id="photo-box">
+            <img id="photo-img" alt="Your catch">
+            <svg id="lines" aria-hidden="true">
+              <defs>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <polyline id="ln-spine" class="ln ln-spine" pathLength="1" filter="url(#glow)"/>
+              <line id="ln-k4" class="ln ln-k4" pathLength="1" filter="url(#glow)"/>
+              <line id="ln-k3" class="ln ln-k3" pathLength="1"/>
+            </svg>
+            <div id="handles"></div>
+            <div class="scan" id="scan" hidden><i></i><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span></div>
+            <div class="tap-guide" id="tap-guide" hidden></div>
+          </div>
+        </div>
+
+        <div class="stage-bar" id="stage-bar" hidden>
+          <div class="legend">
+            <span><i class="sw sw-spine"></i>Fish length</span>
+            <span><i class="sw sw-k4"></i>4 knuckles</span>
+            <span id="lg-k3"><i class="sw sw-k3"></i>3 knuckles</span>
+          </div>
+          <span class="muted small" id="drag-hint">Drag any point to correct it</span>
+          <button class="btn-link" type="button" id="retake">Use another photo</button>
+        </div>
+      </section>
+
+      <!-- Side panel -->
+      <aside class="side">
+        <!-- Before a photo: how it works, and turning on the AI -->
+        <section class="card card-pad panel rise-3" id="p-setup">
+          <h2>Upload a photo. We measure it.</h2>
+          <ol class="howto">
+            <li><b>1</b><span>Hold the fish side-on with your <em>knuckles facing the camera</em>.</span></li>
+            <li><b>2</b><span>Upload the photo. AI finds the species, the fish and your knuckles.</span></li>
+            <li><b>3</b><span>Get its length, weight and points. Drag any point to fine-tune.</span></li>
+          </ol>
+          <div class="status" id="status" hidden>
+            <div class="spinner" aria-hidden="true"></div>
+            <div><strong id="status-title">Analyzing</strong><span class="muted small" id="status-sub"></span></div>
+          </div>
+          <label class="btn btn-primary btn-block" id="pick">
+            <input type="file" id="file2" accept="image/*" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-5 5m5-5 5 5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Upload a photo
+          </label>
+          <!-- Shown when the server has no Gemini key -->
+          <form class="keybox" id="keybox" hidden>
+            <strong>Turn on automatic measuring</strong>
+            <span class="muted small">Paste a Gemini API key (free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>). It's saved to <code>TideCast/.env</code> on this computer only.</span>
+            <div class="keyrow"><input class="input" id="key" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false"><button class="btn btn-ghost" type="submit" id="key-save">Save</button></div>
+            <span class="small" id="key-msg"></span>
+          </form>
+        </section>
+
+        <!-- Result -->
+        <section class="card card-pad panel" id="p-result" hidden>
+          <div class="banner" id="banner" hidden></div>
+          <div class="species-head">
+            <div>
+              <span class="label">Species</span>
+              <select class="select species-select" id="species" aria-label="Species"></select>
+              <span class="sci" id="sci"></span>
+            </div>
+            <span class="rarity" id="rarity"></span>
+          </div>
+          <div class="metrics">
+            <div class="metric"><span class="label">Length</span><strong><b id="m-len">—</b><small> in</small></strong><em id="m-len2"></em></div>
+            <div class="metric"><span class="label">Weight</span><strong><b id="m-wt">—</b><small> lb</small></strong><em id="m-wt2"></em></div>
+          </div>
+          <div class="range" aria-hidden="true"><div class="range-band" id="range-band"></div><div class="range-dot" id="range-dot"></div></div>
+          <p class="muted small range-note" id="range-note"></p>
+          <div class="points">
+            <div><span class="label">Points</span><strong id="m-pts">—</strong></div>
+            <ul id="m-break"></ul>
+          </div>
+          <div class="field">
+            <span>Hand-size reference</span>
+            <div class="seg" role="group" aria-label="Hand-size reference" id="hand">
+              <button type="button" data-hand="male" aria-pressed="true">Avg. men 8.4 cm</button>
+              <button type="button" data-hand="female" aria-pressed="false">Avg. women 7.4 cm</button>
+              <button type="button" data-hand="own" aria-pressed="false">My own</button>
+            </div>
+            <label class="own" id="own" hidden>
+              <input class="input" id="own-cm" type="number" min="6" max="10" step="0.1" placeholder="8.2">
+              <span class="muted small">cm across your four knuckles, index to pinky. Measuring once makes every catch more accurate.</span>
+            </label>
+          </div>
+          <ul class="warnings" id="warnings"></ul>
+          <p class="facts muted small" id="facts"></p>
+          <label class="field"><span>Where you caught it</span>
+            <div class="where"><input class="input" id="where" maxlength="80" placeholder="Lake, river or bay">
+              <button class="btn-link" type="button" id="locate" title="Use my location">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div></label>
+          <label class="field"><span>Your name on the leaderboard</span>
+            <input class="input" id="angler" maxlength="40" placeholder="e.g. Sam Okafor" autocomplete="name"></label>
+          <button class="btn btn-primary btn-block" type="button" id="post">Post to the leaderboard</button>
+          <p class="muted small fine">Weight comes from the species' length–weight curve, so it carries an honest range. One photo, one entry.</p>
+        </section>
+
+        <!-- Posted -->
+        <section class="card card-pad panel done" id="p-done" hidden>
+          <span class="kicker">Posted to the leaderboard</span>
+          <div class="done-rank"><span class="done-burst" aria-hidden="true"><i></i><i></i><i></i></span><small>This week</small><strong id="d-rank">#—</strong></div>
+          <p class="done-line" id="d-line"></p>
+          <div class="done-actions">
+            <a class="btn btn-primary" id="d-board" href="leaderboard.html">See the leaderboard</a>
+            <button class="btn btn-ghost" type="button" id="d-again">Log another</button>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <!-- How to take the photo -->
+    <section class="guide" aria-labelledby="guide-title">
+      <span class="kicker">Get an accurate measurement</span>
+      <h2 class="h2" id="guide-title">Three things make the difference</h2>
+      <div class="guide-grid">
+        <article class="card card-pad">
+          <svg class="guide-art" viewBox="0 0 220 120" aria-hidden="true">
+            <path d="M18 64c30-26 92-34 140-12l30-18-8 30 8 30-30-18c-48 22-110 14-140-12z" fill="rgba(127,214,207,.16)" stroke="#7fd6cf" stroke-width="2"/>
+            <circle cx="40" cy="58" r="3" fill="#7fd6cf"/>
+            <rect x="62" y="70" width="58" height="30" rx="12" fill="#e9c7ad" opacity=".9"/>
+            <g fill="#f6dcc6"><circle cx="70" cy="72" r="7"/><circle cx="84" cy="70" r="7"/><circle cx="98" cy="70" r="7"/><circle cx="112" cy="72" r="7"/></g>
+            <path d="M63 104h56" stroke="#ef9168" stroke-width="2"/><path d="M63 100v8M119 100v8" stroke="#ef9168" stroke-width="2"/>
+            <text x="91" y="118" fill="#f8b994" font-size="9" text-anchor="middle" font-family="DM Sans">4 knuckles ≈ 8.4 cm</text>
+          </svg>
+          <h3>Knuckles to the camera</h3>
+          <p class="muted">Grip the fish so the back of your hand faces the lens. Your four knuckles are the ruler.</p>
+        </article>
+        <article class="card card-pad">
+          <svg class="guide-art" viewBox="0 0 220 120" aria-hidden="true">
+            <path d="M24 60c32-28 98-34 146-12l28-16-6 28 6 28-28-16c-48 22-114 16-146-12z" fill="rgba(239,145,104,.14)" stroke="#ef9168" stroke-width="2"/>
+            <path d="M28 60c40-6 100-6 170-2" stroke="#ef9168" stroke-width="2" stroke-dasharray="4 4"/>
+            <circle cx="28" cy="60" r="4" fill="#ef9168"/><circle cx="198" cy="58" r="4" fill="#ef9168"/>
+            <text x="110" y="112" fill="#f8b994" font-size="9" text-anchor="middle" font-family="DM Sans">snout → tail tip</text>
+          </svg>
+          <h3>The whole fish, side-on</h3>
+          <p class="muted">Snout to the tip of the tail, flat to the camera. Nothing cropped, nothing pointing at the lens.</p>
+        </article>
+        <article class="card card-pad">
+          <svg class="guide-art" viewBox="0 0 220 120" aria-hidden="true">
+            <rect x="20" y="40" width="34" height="26" rx="5" fill="none" stroke="#8fc3ff" stroke-width="2"/><circle cx="37" cy="53" r="6" fill="none" stroke="#8fc3ff" stroke-width="2"/>
+            <path d="M58 53l100-26M58 53l100 26" stroke="#8fc3ff" stroke-width="1.5" stroke-dasharray="3 4" opacity=".7"/>
+            <path d="M150 34c10-6 30-6 44 2l10-6-2 10 2 10-10-6c-14 8-34 8-44 2z" fill="rgba(143,195,255,.16)" stroke="#8fc3ff" stroke-width="2"/>
+            <rect x="152" y="58" width="22" height="14" rx="5" fill="#e9c7ad" opacity=".9"/>
+            <text x="110" y="112" fill="#bcdcff" font-size="9" text-anchor="middle" font-family="DM Sans">hand and fish, same distance</text>
+          </svg>
+          <h3>Hand next to the fish</h3>
+          <p class="muted">Keep your hand right alongside the fish, the same distance from the camera, so both share one scale.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer"><span>TideCast · Howdy Hack</span><span><a href="leaderboard.html">Leaderboard</a><a href="species.html">Species &amp; points</a><a href="/">Explore the waters</a></span></footer>
+
+  <script src="site.js"></script>
+  <script src="catch.js"></script>
+</body>
+</html>

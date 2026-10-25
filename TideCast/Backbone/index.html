@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tidecast — Find your next great catch</title>
+  <meta name="description" content="Explore the waters. Learn what's biting. Make every catch count.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="tidecast.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+  <script src="fish-points.js"></script>
+  <script src="waters.js"></script>
+  <script src="stats.js"></script>
+</head>
+<body>
+  <!-- The whole journey is one WebGL canvas driven by the page's scroll position -->
+  <canvas id="stage" aria-hidden="true"></canvas>
+  <div id="overlay" aria-hidden="true"></div>
+
+  <header data-site-header></header>
+
+  <main id="hero">
+    <h1>Find your next<br>great catch.</h1>
+    <p class="lede">Explore the waters. Learn what’s biting.<br>Make every catch count.</p>
+    <a class="cta" href="catch.html">LOG A CATCH <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a class="teaser" id="teaser" href="leaderboard.html" aria-label="Go to the leaderboard">
+      <span class="teaser-art" aria-hidden="true"></span>
+      <span class="teaser-text"><small>THIS WEEK’S TOP CATCH</small><strong id="teaser-title">—</strong><span id="teaser-sub"></span></span>
+      <span class="teaser-go">Leaderboard →</span>
+    </a>
+  </main>
+  <div id="scroll-hint" aria-hidden="true"><span>Scroll to dive in</span><i></i></div>
+
+  <nav id="chapters" aria-label="Chapters">
+    <button data-to="0" aria-label="Earth"><span>Earth</span></button>
+    <button data-to="0.18" aria-label="Your water"><span>Your water</span></button>
+    <button data-to="0.38" aria-label="Descent"><span>Descent</span></button>
+    <button data-to="0.62" aria-label="Your lake"><span>Your lake</span></button>
+    <button data-section="program" aria-label="How it works"><span>How it works</span></button>
+    <button data-section="stats" aria-label="By the numbers"><span>By the numbers</span></button>
+  </nav>
+
+
+  <!-- Scroll length of the journey -->
+  <div id="track" aria-hidden="true"></div>
+
+  <!-- After the journey: the page scrolls on normally over the water -->
+  <div id="after">
+    <section id="program" class="after-section" aria-labelledby="program-title">
+      <small class="kicker">HOW IT WORKS</small>
+      <h2 id="program-title">From your nearest water to the leaderboard</h2>
+      <!-- Placeholder: swap this frame for the program video / walkthrough -->
+      <div class="program-frame" role="img" aria-label="Program walkthrough placeholder">
+        <span class="ph-tag">Placeholder</span>
+        <svg viewBox="0 0 24 24" width="54" height="54" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10 8l6 4-6 4z" fill="currentColor"/></svg>
+        <strong>Program walkthrough</strong>
+        <span>Video or interactive demo of the TideCast app goes here.</span>
+        <a class="cta small" href="catch.html">TRY IT NOW: LOG A CATCH →</a>
+      </div>
+      <ol class="steps">
+        <li><b>Find water near you</b><span>Open <a href="/">Explore the waters</a> and tap <em>Spots near me</em>: the lakes, rivers and bays around you, and which fish to go for.</span></li>
+        <li><b>Learn what’s biting</b><span>Every species recorded in that water (OBIS) and fishing activity from Global Fishing Watch, on a 3D globe.</span></li>
+        <li><b>Hold it, knuckles out</b><span>Photograph the whole fish side-on, gripping it so your knuckles face the camera. Your hand is the ruler.</span></li>
+        <li><b>Upload</b><span>AI identifies the species and traces the fish and your knuckles; you can drag any point to correct it.</span></li>
+        <li><b>Earn points</b><span>Length becomes weight on the species’ own curve, then points: rarity + 10 per pound + a trophy bonus.</span></li>
+      </ol>
+      <div class="rules">
+        <div class="rules-head"><h3>To get on the leaderboard</h3></div>
+        <ul>
+          <li>The whole fish and your knuckles are visible in the photo (or you mark them yourself).</li>
+          <li>One photo, one entry: the same photo can’t be posted twice.</li>
+          <li>Sizes past a species’ record length are rejected as scale errors.</li>
+          <li>Keep it legal: licensed, in season and within size limits where you fish.</li>
+          <li>The weekly board resets every Monday; all-time keeps every catch.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="stats" class="after-section" aria-labelledby="stats-title">
+      <small class="kicker">BY THE NUMBERS</small>
+      <h2 id="stats-title">A big market, a measurable impact</h2>
+      <h3 class="stats-group">The market</h3>
+      <div class="stat-grid" id="stats-market"></div>
+      <h3 class="stats-group">Our impact</h3>
+      <div class="stat-grid" id="stats-impact"></div>
+      <h3 class="stats-group">The model</h3>
+      <div class="stat-grid" id="stats-model"></div>
+      <ul class="sources" id="stats-sources"></ul>
+      <footer class="after-foot">
+        <a class="cta small" href="catch.html">LOG A CATCH →</a>
+        <a class="cta small ghost" href="leaderboard.html">SEE THE LEADERBOARD →</a>
+        <a class="cta small ghost" href="/">EXPLORE THE WATERS →</a>
+        <button id="to-top" type="button">↑ Back to the globe</button>
+      </footer>
+    </section>
+  </div>
+
+  <script src="site.js"></script>
+  <script type="module" src="tidecast.js"></script>
+</body>
+</html>

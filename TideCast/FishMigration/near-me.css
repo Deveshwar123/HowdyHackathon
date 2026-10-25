@@ -1,0 +1,20 @@
+/* "Spots near me" (near-me.js): a button over the globe and a dropdown list, in the atlas's style. */
+#nm { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 20; font-size: 12px; color: #151515; }
+#nm-open { display: flex; align-items: center; gap: 7px; margin: 0 auto; padding: 8px 14px; border-radius: 999px; border: 1px solid #bbb; background: #fff; color: #151515; font: inherit; font-weight: 600; cursor: pointer; box-shadow: 0 3px 14px #0003; }
+#nm-open:hover { border-color: #888; }
+#nm-panel { margin-top: 8px; width: min(340px, calc(100vw - 32px)); max-height: 60vh; overflow: auto; padding: 0 14px 10px; background: #fff; border: 1px solid #bbb; border-radius: 3px; box-shadow: 0 3px 14px #0003; }
+#nm-panel[hidden] { display: none; }
+#nm-panel header { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; padding: 10px 0 6px; background: #fff; border-bottom: 1px solid #eee; }
+#nm-panel header strong { font-size: 13px; }
+#nm-close { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: #666; }
+#nm-status { margin: 8px 0; color: #555; }
+#nm-list { list-style: none; margin: 0; padding: 0; }
+#nm-list button { display: grid; gap: 2px; width: 100%; padding: 8px 0; border: 0; border-bottom: 1px solid #eee; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+#nm-list button:hover { background: #f6f8fa; }
+.nm-head { display: flex; justify-content: space-between; gap: 8px; }
+.nm-head em { font-style: normal; color: #c4623a; white-space: nowrap; }
+.nm-kind { color: #777; font-size: 11px; }
+.nm-fish { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.nm-fish i { font-style: normal; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #eef3f7; }
+.nm-fish b { color: #c4623a; }
+.nm-credit { display: block; margin-top: 8px; color: #999; font-size: 9px; }

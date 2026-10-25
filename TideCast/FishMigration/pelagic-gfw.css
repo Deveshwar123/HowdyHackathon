@@ -1,0 +1,213 @@
+/* Pelagic explorer: Where → What → Results. Matches the atlas's monochrome style. */
+
+/* The explorer replaces the atlas's own sidebar, details panel and map chrome. */
+body.px-on .sidebar > :not(#px-left),
+body.px-on .map-top,
+body.px-on .map-bottom,
+body.px-on .timeline,
+body.px-on .area-chip,
+body.px-on .record-popup,
+body.px-on .instructions,
+body.px-on main > header nav { display: none !important; }
+body.px-on .sidebar { overflow: hidden; }
+/* No right panel: the map takes its width; results float over the map in a card. */
+body.px-on .details { display: none !important; }
+body.px-on .workspace { grid-template-columns: 310px minmax(0, 1fr); }
+@media (min-width: 1600px) { body.px-on .workspace { grid-template-columns: 330px minmax(0, 1fr); } }
+@media (max-width: 1100px) { body.px-on .workspace { grid-template-columns: 275px minmax(0, 1fr); } }
+
+#px-left [hidden], #px-right [hidden], #px-legend[hidden], #px-hint[hidden] { display: none !important; }
+#px-left, #px-right { display: flex; flex-direction: column; height: 100%; min-height: 0; color: #151515; font-size: 12px; }
+#px-right[hidden] { display: none; }
+#px-left .px-scroll { flex: 1; overflow: auto; min-height: 0; }
+#px-right { position: absolute; top: 64px; right: 16px; z-index: 3; width: 330px; height: auto; max-height: calc(100% - 136px); overflow: auto; padding: 0 16px 14px; background: #fff; border: 1px solid #bbb; border-radius: 3px; box-shadow: 0 3px 14px #0003; }
+body.px-card-open .map-controls { right: 362px; }
+
+.px-muted { color: #777; font-size: 11px; line-height: 1.5; margin: 6px 0; }
+.px-eyebrow { color: #666; letter-spacing: .6px; font-size: 10px; text-transform: uppercase; font-weight: 600; }
+
+/* Steps */
+.px-step { padding: 16px 20px 18px; border-bottom: 1px solid #ddd; }
+.px-step > header { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+.px-step > header b { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid #111; display: grid; place-items: center; font-size: 12px; flex: none; }
+.px-step.done > header b { background: #111; color: #fff; }
+.px-step > header strong { display: block; font-size: 16px; }
+.px-step > header small { color: #666; font-size: 11px; }
+.px-sub { color: #666; font-size: 10px; letter-spacing: .5px; text-transform: uppercase; margin: 12px 0 6px; }
+
+.px-check { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; cursor: pointer; line-height: 1.35; }
+.px-check input { accent-color: #111; margin: 1px 0 0; flex: none; }
+.px-check span { flex: 1; min-width: 0; }
+.px-check small { display: block; color: #777; font-size: 10px; }
+.px-swatch { width: 9px; height: 9px; border-radius: 50%; margin-top: 3px; flex: none; border: 1px solid #0003; }
+.px-inline { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #555; margin: 6px 0; }
+.px-inline select, .px-dates input, .px-filter, .px-search input { border: 1px solid #ccc; border-radius: 3px; padding: 6px 8px; font-size: 11px; color: #111; background: #fff; min-width: 0; }
+.px-search { display: flex; gap: 6px; margin: 8px 0; }
+.px-search input { flex: 1; }
+.px-search button { background: #111; color: #fff; border-radius: 3px; padding: 6px 10px; font-size: 11px; }
+.px-filter { width: 100%; margin: 6px 0; }
+
+.px-presets { display: flex; flex-wrap: wrap; gap: 5px; }
+.px-presets button { border: 1px solid #ccc; border-radius: 14px; padding: 4px 10px; font-size: 11px; background: #fff; }
+.px-presets button:hover { border-color: #111; }
+.px-place { display: block; width: 100%; text-align: left; padding: 5px 0; border-bottom: 1px solid #eee; }
+.px-place small { display: block; color: #777; font-size: 10px; }
+
+#px-areas { margin-top: 12px; }
+.px-area { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 3px; margin-bottom: 5px; }
+.px-area b { width: 20px; height: 20px; display: grid; place-items: center; font-size: 11px; border: 1px solid #0004; border-radius: 3px; flex: none; }
+.px-area span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-area button { color: #777; font-size: 15px; padding: 0 3px; }
+.px-area button:hover { color: #111; }
+
+.px-dates { display: flex; gap: 8px; margin-bottom: 8px; }
+.px-dates label { flex: 1; font-size: 10px; color: #666; }
+.px-dates input { width: 100%; margin-top: 2px; }
+.px-step details { border-top: 1px solid #eee; padding: 8px 0 4px; }
+.px-step summary { cursor: pointer; font-weight: 600; font-size: 12px; padding: 2px 0 6px; }
+.px-step summary small { color: #888; font-weight: 400; font-size: 10px; margin-left: 4px; }
+.px-list { max-height: 210px; overflow: auto; border: 1px solid #eee; border-radius: 3px; padding: 2px 8px; }
+
+/* Sticky action bar */
+.px-actions { border-top: 1px solid #ddd; padding: 12px 20px; background: #fff; }
+.px-actions small { display: block; color: #555; margin-bottom: 8px; font-size: 11px; }
+.px-actions div { display: flex; gap: 8px; }
+.px-primary { flex: 1; background: #111; color: #fff; border-radius: 3px; padding: 10px 12px; font-weight: 600; font-size: 12px; }
+.px-primary:disabled { background: #bbb; cursor: not-allowed; opacity: 1; }
+.px-primary.small { flex: none; width: 100%; padding: 8px; margin: 8px 0; font-size: 11px; }
+.px-primary.pulse { box-shadow: 0 0 0 0 #111a; animation: px-pulse 1.6s infinite; }
+@keyframes px-pulse { 70% { box-shadow: 0 0 0 8px #1110; } 100% { box-shadow: 0 0 0 0 #1110; } }
+.px-ghost { border: 1px solid #ccc; border-radius: 3px; padding: 10px 12px; font-size: 12px; }
+
+/* Results */
+.px-right-head { position: sticky; top: 0; background: #fff; padding: 12px 0 6px; z-index: 1; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.px-right-head button { font-size: 18px; color: #777; line-height: 1; padding: 0 2px; }
+.px-right-head button:hover { color: #111; }
+#px-left .px-token { margin: 12px 20px 0; }
+.px-token { background: #fff4e5; border: 1px solid #f0c890; padding: 8px 10px; font-size: 11px; }
+.px-period { color: #666; font-size: 11px; margin: 10px 0; }
+.px-card { border: 1px solid #ddd; border-top: 4px solid var(--area); border-radius: 3px; padding: 12px; margin-bottom: 12px; }
+.px-card > header { display: flex; gap: 8px; align-items: center; }
+.px-card > header b { width: 22px; height: 22px; display: grid; place-items: center; background: var(--area); border: 1px solid #0004; border-radius: 3px; font-size: 11px; flex: none; }
+.px-card > header div { flex: 1; min-width: 0; }
+.px-card > header strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-card > header small { color: #888; font-size: 10px; }
+.px-card > header button { color: #777; font-size: 15px; }
+#px-right h5 { margin: 14px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #444; }
+#px-right h5 small { text-transform: none; letter-spacing: 0; color: #999; font-weight: 400; }
+.px-stat { margin: 4px 0; }
+.px-stat strong { font-size: 16px; }
+.px-warn { background: #fdecea; border-left: 3px solid #d93025; padding: 5px 8px; font-size: 11px; }
+.px-bar { display: grid; grid-template-columns: 92px 1fr 62px; align-items: center; gap: 6px; font-size: 10px; margin: 3px 0; }
+.px-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-bar i { height: 6px; display: block; }
+.px-bar small { text-align: right; color: #555; }
+.px-legend-row { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 2px 0; }
+.px-legend-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; border: 1px solid #0003; }
+.px-legend-row span { flex: 1; }
+.px-legend-row small { color: #555; }
+.px-vessel { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 6px 0; border-bottom: 1px solid #eee; text-align: left; font-size: 11px; }
+.px-vessel:hover { background: #f5f5f3; }
+.px-vessel strong { display: block; }
+.px-vessel small { color: #777; font-size: 10px; white-space: nowrap; }
+.px-taxa { max-height: 220px; overflow: auto; }
+.px-taxon { display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 0; border-bottom: 1px solid #f0f0f0; font-size: 11px; text-align: left; }
+.px-taxon i { flex: 1; }
+.px-taxon small { color: #777; }
+.px-taxon b { width: 18px; height: 18px; border: 1px solid #ccc; border-radius: 50%; display: grid; place-items: center; font-size: 12px; }
+.px-taxon:hover b { background: #111; color: #fff; border-color: #111; }
+
+/* Detail view */
+.px-back { font-size: 11px; color: #555; margin: 12px 0 8px; padding: 0; }
+.px-back:hover { color: #111; }
+.px-zone { border-left: 4px solid var(--c); padding: 4px 0 4px 10px; margin: 8px 0; }
+.px-zone small { color: #777; font-size: 9px; text-transform: uppercase; letter-spacing: .5px; display: block; }
+.px-zone strong { display: block; font-size: 15px; margin: 2px 0; }
+.px-zone span { display: block; color: #555; font-size: 11px; }
+#px-detail a { display: block; font-size: 11px; margin: 6px 0; }
+.px-facts { display: grid; grid-template-columns: 90px 1fr; gap: 3px 8px; margin: 10px 0; font-size: 11px; }
+.px-facts dt { color: #777; }
+.px-facts dd { margin: 0; overflow-wrap: anywhere; }
+.px-insight { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; margin: 3px 0; font-size: 11px; background: #f5f5f3; border-left: 3px solid #bbb; }
+.px-insight.warn { background: #fdecea; border-left-color: #d93025; }
+.px-insight.ok { border-left-color: #2e9d6a; }
+.px-credit { color: #999; font-size: 9px; margin-top: 16px; line-height: 1.5; }
+
+/* On the map */
+#px-legend { position: absolute; left: 16px; bottom: 16px; z-index: 2; background: #fffffff2; color: #111; border: 1px solid #ccc; border-radius: 3px; padding: 10px 12px; font-size: 11px; max-width: 260px; max-height: 45%; overflow: auto; }
+#px-legend strong { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #666; margin-bottom: 4px; }
+#px-legend div { display: flex; align-items: center; gap: 7px; padding: 1px 0; }
+#px-legend i { flex: none; width: 10px; height: 10px; }
+#px-legend i.px-k-dot { border-radius: 50%; background: var(--c); border: 1px solid #0004; }
+#px-legend i.px-k-square { border: 2px solid var(--c); outline: 1px solid #0003; }
+#px-legend i.px-k-bar { height: 6px; background: linear-gradient(90deg, transparent, var(--c)); }
+#px-legend i.px-k-line { height: 2px; background: var(--c); outline: 1px solid #0002; }
+#px-hint { position: absolute; top: 16px; left: 16px; z-index: 2; background: #111; color: #fff; border-radius: 16px; padding: 7px 14px; font-size: 12px; pointer-events: none; white-space: nowrap; }
+
+/* Fish rows: one click selects, highlights and opens the profile */
+.px-fish { align-items: center; padding: 6px 6px 6px 5px; border-left: 3px solid transparent; border-radius: 2px; }
+.px-fish:hover { background: #f5f5f3; }
+.px-fish.on span { font-weight: 600; }
+.px-fish.on small { font-weight: 400; }
+.px-fish.focus { background: #efefeb; border-left-color: #111; }
+.px-fish:focus-visible { outline: 2px solid #111; outline-offset: -2px; }
+.px-fish .px-swatch { margin-top: 0; }
+#px-found { max-height: 180px; }
+#px-found-count { text-transform: none; letter-spacing: 0; }
+.px-rowbtn { width: 100%; text-align: left; padding: 4px 4px; border-radius: 2px; }
+.px-rowbtn:hover, .px-rowbtn.focus { background: #f5f5f3; }
+.px-mini { width: 16px; height: 16px; display: grid; place-items: center; font-size: 9px; border: 1px solid #0004; border-radius: 2px; flex: none; }
+.px-fish-head { border-top: 4px solid var(--c); padding-top: 12px; margin-top: 4px; }
+.px-fish-head small { color: #777; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.px-fish-head h3 { margin: 4px 0 2px; font-size: 22px; line-height: 1.2; }
+.px-fish-head i { color: #555; }
+.px-desc { color: #444; font-size: 12px; line-height: 1.7; }
+.px-wide { width: 100%; margin-top: 10px; }
+
+/* Vessel search in the corner of the map */
+.px-map-search { position: absolute; top: 16px; right: 16px; z-index: 3; width: 270px; margin: 0; background: #fff; border: 1px solid #ccc; border-radius: 3px; padding: 4px; }
+.px-map-search input { border: 0; }
+@media (max-width: 1100px) { .px-map-search { width: 210px; } #px-hint { top: 62px; } }
+
+/* Basemap switcher */
+#px-basemap { position: absolute; right: 16px; bottom: 16px; z-index: 2; display: flex; align-items: center; background: #fff; border: 1px solid #ccc; border-radius: 3px; overflow: hidden; font-size: 11px; color: #111; }
+#px-basemap button { padding: 7px 10px; border-right: 1px solid #ddd; }
+#px-basemap button.active { background: #111; color: #fff; }
+#px-basemap label { display: flex; align-items: center; gap: 5px; padding: 0 10px; cursor: pointer; }
+#px-basemap input { accent-color: #111; }
+
+/* Area box: every fish recorded in the selected area */
+#px-areabox { position: absolute; top: 60px; left: 16px; z-index: 3; width: 290px; max-height: calc(100% - 230px); display: flex; flex-direction: column; background: #fff; color: #151515; border: 1px solid #bbb; border-top: 4px solid var(--area); border-radius: 3px; padding: 12px 14px; font-size: 12px; box-shadow: 0 3px 12px #0003; }
+#px-areabox[hidden] { display: none; }
+#px-areabox > header { display: flex; align-items: center; gap: 8px; }
+#px-areabox > header b { width: 22px; height: 22px; display: grid; place-items: center; background: var(--area); border: 1px solid #0004; border-radius: 3px; font-size: 11px; flex: none; }
+#px-areabox > header div { flex: 1; min-width: 0; }
+#px-areabox > header strong { display: block; font-size: 13px; }
+#px-areabox > header small { display: block; color: #777; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#px-areabox > header button { color: #777; font-size: 16px; padding: 0 2px; }
+#px-areabox > header button:hover { color: #111; }
+.px-areabox-sum { margin: 10px 0 4px; }
+.px-areabox-sum strong { font-size: 15px; }
+.px-areabox-list { overflow: auto; min-height: 0; flex: 1; margin-top: 4px; }
+.px-areafish { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 4px; border-bottom: 1px solid #f0f0f0; text-align: left; font-size: 11px; border-left: 3px solid transparent; }
+.px-areafish:hover { background: #f5f5f3; }
+.px-areafish.on span { font-weight: 600; }
+.px-areafish.focus { background: #efefeb; border-left-color: #111; }
+.px-areafish span { flex: 1; min-width: 0; }
+.px-areafish span small { display: block; color: #777; font-weight: 400; }
+.px-areafish > small { color: #777; }
+.px-empty-dot { background: transparent; border: 1px solid #bbb; }
+.px-area { cursor: pointer; }
+.px-area:hover { border-color: #999; }
+.px-area.active { border-color: #111; box-shadow: inset 3px 0 0 #111; }
+
+.px-selectall { border: 1px solid #ddd; border-radius: 3px; padding: 8px 10px; margin: 4px 0 8px; font-weight: 600; }
+.px-selectall small { font-weight: 400; }
+.px-selectall:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+
+@media (max-width: 880px) {
+  body.px-on .workspace { grid-template-columns: 275px minmax(0, 1fr); }
+  #px-right { width: auto; left: 16px; }
+  body.px-card-open .map-controls { right: 20px; }
+  #px-hint { white-space: normal; text-align: center; }
+}

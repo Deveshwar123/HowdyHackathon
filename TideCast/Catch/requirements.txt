@@ -1,0 +1,8 @@
+# TideCast runs on the Python 3 standard library: nothing to install.
+#   cd TideCast && python3 FishMigration/server.py
+#
+# The first version of the catch app (FastAPI + the Gemini SDK) needed:
+#   fastapi, uvicorn, python-multipart, google-genai, pillow, python-dotenv, jinja2
+# Those are no longer required: the catch API is served by FishMigration/server.py and talks
+# to Gemini over its REST API. Set GEMINI_API_KEY (environment or TideCast/.env) to turn on
+# automatic measuring.
