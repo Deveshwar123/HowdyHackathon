@@ -207,7 +207,6 @@ const earthMat = new THREE.ShaderMaterial({
       float fres = pow(1.0 - max(dot(N, V), 0.0), 3.6);
       vec3 atm = mix(vec3(0.32, 0.58, 1.0), vec3(1.0, 0.68, 0.48), smoothstep(0.3, 1.0, dot(N, L)));
       col = mix(col, atm * (lit * 0.95 + 0.08), fres * 0.45);
-      col = mix(col, vec3(0.62, 0.72, 0.84), uHaze * 0.08);            // aerial perspective
 
       // Your location pings, slowly: a scroll-driven wave that travels out to the nearest water,
       // plus ambient sonar pulses sized to the view.
@@ -526,13 +525,12 @@ const groundMat = new THREE.ShaderMaterial({
       vec3 Ls = normalize(vec3(0.35, 0.7, -0.6));
       live += vec3(0.75, 0.85, 0.95) * pow(max(dot(Rv, Ls), 0.0), 380.0) * 0.35;
       float detail = 1.0 - smoothstep(250.0, 4500.0, uCamH);
-      vec3 waterCol = mix(land * 1.12 + vec3(0.0, 0.01, 0.015), live, detail);
+      vec3 waterCol = mix(land, live, detail);       // the photo's water is already this deep blue
       vec3 col = mix(land, waterCol, wet);
 
-      // Haze: the globe's aerial perspective high up, distance haze near the water.
-      col = mix(col, vec3(0.62, 0.72, 0.84), 0.08 * smoothstep(400.0, 9000.0, uCamH));
+      // No white haze: far ground just settles into the land's own colour.
       float dist = length(uCam - vW);
-      col = mix(col, vec3(0.8, 0.88, 0.95), 1.0 - exp(-max(dist - uCamH * 1.05, 0.0) / 5000.0));
+      col = mix(col, vec3(0.06, 0.075, 0.045), 1.0 - exp(-max(dist - uCamH * 1.05 - 8000.0, 0.0) / 20000.0));
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
     }`,
