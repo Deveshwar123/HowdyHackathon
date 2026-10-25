@@ -39,3 +39,12 @@ to replace the drawn fish on the species guide and leaderboard.
 | `mahi-mahi.jpg` | Mahi-Mahi | *Coryphaena hippurus* | Bright green, blue and gold body, one long dorsal fin, blunt forehead on large males |
 | `tarpon.jpg` | Tarpon | *Megalops atlanticus* | Huge silver scales, upturned mouth, last dorsal ray trails as a long filament |
 | `alligator-gar.jpg` | Alligator Gar | *Atractosteus spatula* | Long alligator-like snout with a double row of teeth, armored diamond scales |
+
+## Processing
+
+`python3 TideCast/fish-photos/make_species.py` (needs Pillow, numpy, scipy) cuts each fish out,
+adds the white outline and writes `Backbone/assets/species/<id>.webp`. The `PHOTOS` table at the
+top of the script says which photo is used for which species.
+
+Still drawn (no matching photo yet): `king-mackerel`, `redfish`, `alligator-gar`.
+Uploaded but not used: `Goldfish.png`, `Wahoo.png`, `Muskellunge.png`, `Brown Trout.png`.
