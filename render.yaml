@@ -1,0 +1,23 @@
+# Render Blueprint: deploys TideCast (landing page, fish atlas, catch app) as one web service.
+# On render.com: New > Blueprint > pick this repo. Landing page is at /backbone/, the atlas at /.
+services:
+  - type: web
+    name: tidecast
+    runtime: python
+    plan: free
+    buildCommand: pip install certifi
+    startCommand: python3 TideCast/FishMigration/server.py
+    healthCheckPath: /backbone/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: HOST
+        value: 0.0.0.0
+      - key: PUBLIC
+        value: "1"
+      # Optional: turns on automatic catch measuring. Paste your key in the Render dashboard.
+      - key: GEMINI_API_KEY
+        sync: false
+      # Optional: overrides the Global Fishing Watch token built into server.py.
+      - key: GFW_TOKEN
+        sync: false

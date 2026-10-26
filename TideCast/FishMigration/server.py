@@ -47,6 +47,10 @@ import net  # noqa: E402  (trusted certificates for every outside call)
 # The TideCast landing page (TideCast/Backbone), served at /backbone/.
 BACKBONE = os.path.join(os.path.dirname(ROOT), "Backbone")
 PORT = int(os.environ.get("PORT", "8790"))
+# Hosting (Render etc.): HOST=0.0.0.0 to accept outside connections. PUBLIC=1 turns off the
+# admin routes (saving a Gemini key, installing the 4 GB length model) and the browser launch.
+HOST = os.environ.get("HOST", "127.0.0.1")
+PUBLIC = os.environ.get("PUBLIC", "").lower() in ("1", "true", "yes")
 OBIS = os.environ.get("OBIS_URL", "https://api.obis.org/v3")
 GFW = os.environ.get("GFW_URL", "https://gateway.api.globalfishingwatch.org/v3")
 PHOTON = os.environ.get("PHOTON_URL", "https://photon.komoot.io/api/")
@@ -344,6 +348,9 @@ CATCH_ROUTES = {
     "/api/catch/key": catch.set_key,
     "/api/catch/model/install": catch.model_install,
 }
+if PUBLIC:
+    for _admin in ("/api/catch/key", "/api/catch/model/install"):
+        CATCH_ROUTES.pop(_admin)
 
 
 def fish_points_js():
@@ -628,11 +635,11 @@ def port_in_use(port):
 
 if __name__ == "__main__":
     port = PORT
-    while port_in_use(port):
+    while not PUBLIC and port_in_use(port):
         print(f"Port {port} is already used by another app - trying {port + 1}")
         port += 1
     catch.init()
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = ThreadingHTTPServer((HOST, port), Handler)
     url = f"http://127.0.0.1:{port}/backbone/"   # TideCast landing page; "Explore" opens the atlas at /
     print(f"TideCast running at {url}  (press Ctrl+C to stop)")
     print(f"  Fish atlas (FishMigration): http://127.0.0.1:{port}/")
@@ -644,6 +651,6 @@ if __name__ == "__main__":
           "off - " + model["reason"] + "; anglers mark their knuckles instead (see Catch/README.md)"))
     print("  Global Fishing Watch: checking the API token with GFW…")
     threading.Thread(target=check_token, daemon=True).start()
-    if not os.environ.get("NO_BROWSER"):
+    if not (PUBLIC or os.environ.get("NO_BROWSER")):
         threading.Timer(0.8, webbrowser.open, [url]).start()
     server.serve_forever()
