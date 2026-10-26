@@ -12,6 +12,8 @@ import json
 import os
 import threading
 
+import remote_model
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 NEEDED_FILES = ("automl_model.pkl", "features_scaler_model.pkl", "length_scaler_model.pkl")
 NEEDED_PACKAGES = ("torch", "torchvision", "sklearn", "flaml", "xgboost", "numpy", "PIL")
@@ -31,6 +33,8 @@ def artifacts_dir():
 
 def status():
     """{"available": bool, "reason": str} without loading anything heavy."""
+    if remote_model.enabled():                  # the model runs on the hosted model service
+        return {"available": True, "reason": ""}
     missing = [p for p in NEEDED_PACKAGES if importlib.util.find_spec(p) is None]
     if missing:
         return {"available": False, "reason": "packages not installed: " + ", ".join(missing)}
@@ -111,17 +115,28 @@ def _explain(e):
 
 def warm_up():
     """Start loading in the background (never blocks a request)."""
+    if remote_model.enabled():
+        return remote_model.warm_up()
     if status()["available"] and _load["state"] in ("idle", "failed"):
         _load["state"] = "loading"
         threading.Thread(target=_load_now, daemon=True).start()
 
 
 def ready():
+    if remote_model.enabled():
+        return remote_model.health()["state"] == "ready"
     return _predictor is not None
 
 
 def load_state():
+    if remote_model.enabled():
+        h = remote_model.health()
+        return {"state": "loading" if h["state"] == "idle" else h["state"], "error": h["error"], "since": 0.0}
     return dict(_load)
+
+
+def remote():
+    return remote_model.enabled()
 
 
 _emb_cache = {}
@@ -153,6 +168,15 @@ def predict_length_cm(image_path, key=None):
     is still loading; callers fall back to the knuckle method then."""
     key = key or image_path
     if key in _cache:
+        return _cache[key]
+    if remote_model.enabled():
+        if not ready():                         # asleep or starting: knuckles for now, don't wait
+            warm_up()
+            return None
+        value = remote_model.analyze(image_path, key).get("length_cm")
+        if not value or not value > 0:
+            return None
+        _cache[key] = float(value)
         return _cache[key]
     if not status()["available"]:
         return None

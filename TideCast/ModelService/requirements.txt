@@ -1,0 +1,13 @@
+# The TideCast model service (and the optional local length model).
+# torch/torchvision: on a server without a GPU install the CPU build first (much smaller):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# The trained files in TideCast/Catch/fish_length/artifacts were pickled with these exact versions
+# of scikit-learn, FLAML and XGBoost, so those are pinned.
+torch>=2.2
+torchvision>=0.17
+numpy>=1.26,<2.3
+pillow>=10
+pandas>=2
+scikit-learn==1.6.0
+flaml[automl]==2.3.2
+xgboost==2.1.3

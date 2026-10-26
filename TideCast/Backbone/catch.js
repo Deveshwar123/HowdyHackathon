@@ -96,14 +96,16 @@
   });
 
   // ---- Waiting for the length model to load (the first time it downloads ~4 GB) ----
-  let gateTimer = 0;
+  let gateTimer = 0, gateSince = 0, gatePhoto = null;
+  const WAKE_LIMIT_MS = window.TC_WAKE_LIMIT_MS || 180000;   // then stop waiting for the model
   async function modelGate() {
     clearTimeout(gateTimer);
+    if (gatePhoto !== S.photo) { gatePhoto = S.photo; gateSince = Date.now(); }
     const d = await fetch('/api/catch/model').then((r) => r.json()).catch(() => null);
     const m = (d && d.model) || {};
     S.modelReady = !!m.ready;
     if (m.ready) {
-      if (el.banner.textContent.startsWith('Loading the length model')) banner('');
+      if (/^(Loading the length model|Waking up the TideCast model)/.test(el.banner.textContent)) banner('');
       if (S.species) remeasure(true);
       else identifySpecies();
       return;
@@ -113,7 +115,12 @@
       showAi(S.ai);
       return startManual(`The length model couldn’t start (${m.load_error || m.reason || 'unknown error'}). Mark the fish and your knuckles instead: four taps.`);
     }
-    banner('Loading the length model… the first time it downloads about 4 GB, so this can take a few minutes.');
+    if (Date.now() - gateSince > WAKE_LIMIT_MS && S.mode !== 'manual') {
+      return startManual('The length model isn’t answering right now. Mark the fish and your knuckles instead: four taps.');
+    }
+    banner(m.remote
+      ? 'Waking up the TideCast model… it sleeps when nobody has used it for a while, so this can take a couple of minutes.'
+      : 'Loading the length model… the first time it downloads about 4 GB, so this can take a few minutes.');
     gateTimer = setTimeout(modelGate, 3000);
   }
 
@@ -542,6 +549,9 @@
       if (d.ok) {
         if (!el.banner.classList.contains('error')) banner('');
         renderResult(d.result);
+      } else if (S.model && !(S.spine.length && S.k4) && S.mode !== 'manual') {
+        // The model couldn't measure this photo (or its server didn't answer): fall back to knuckles.
+        startManual('The length model couldn’t measure this photo. Mark the fish and your knuckles instead: four taps.');
       } else {
         banner(d.error, true);
         renderResult(null);

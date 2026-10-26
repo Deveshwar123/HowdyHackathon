@@ -16,12 +16,13 @@ import re
 import threading
 
 import length_ai
+import remote_model
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TIDECAST = os.path.dirname(HERE)
 REF_DIRS = [os.path.join(TIDECAST, "Backbone", "assets", "species"), os.path.join(TIDECAST, "fish-photos")]
 EXTRA_NAMES = {"northern-red-snapper": "red-snapper"}   # fish-photos file names that differ from the id
-INDEX_FILE = os.path.join(HERE, "species_index.npz")
+INDEX_FILE = os.environ.get("SPECIES_INDEX") or os.path.join(HERE, "species_index.npz")
 IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp")
 TEMPERATURE = 0.03          # softmax sharpness over cosine similarities
 CONFIDENT = 0.45            # top probability above which the pick is shown as a match, not a guess
@@ -52,8 +53,14 @@ def references(species_ids):
 
 
 def _signature(refs):
-    return json.dumps([[sid, os.path.basename(p), os.path.getsize(p), int(os.path.getmtime(p))]
-                       for sid, p in refs])
+    """Fingerprint of the reference pictures by content (not file times), so an index built on one
+    computer is reused on another, e.g. a fresh git clone on the model server."""
+    import hashlib
+    h = hashlib.sha1()
+    for sid, p in refs:
+        with open(p, "rb") as f:
+            h.update(f"{sid}:{os.path.basename(p)}:".encode() + hashlib.sha1(f.read()).digest())
+    return json.dumps({"v": 2, "n": len(refs), "sha1": h.hexdigest()})
 
 
 def _build(species_ids):
@@ -66,7 +73,7 @@ def _build(species_ids):
         cached = np.load(INDEX_FILE, allow_pickle=False)
         if str(cached["sig"]) == sig:
             with _lock:
-                _index = (list(cached["names"]), cached["matrix"])
+                _index = ([str(n) for n in cached["names"]], cached["matrix"].astype("float32"))
             _state.update(state="ready", n_refs=len(refs))
             return
     except (OSError, KeyError, ValueError):
@@ -88,7 +95,8 @@ def _build(species_ids):
     m = np.stack(rows).astype("float32")
     m /= np.linalg.norm(m, axis=1, keepdims=True) + 1e-8
     try:
-        np.savez(INDEX_FILE, names=np.array(names), matrix=m, sig=np.array(sig))
+        # float16 halves the file (it's committed to the repo so a fresh server starts instantly)
+        np.savez_compressed(INDEX_FILE, names=np.array(names), matrix=m.astype("float16"), sig=np.array(sig))
     except OSError:
         pass
     with _lock:
@@ -99,6 +107,8 @@ def _build(species_ids):
 
 def warm_up(species_ids):
     """Build (or load) the reference index in the background once the length model is loaded."""
+    if remote_model.enabled():                  # the hosted model service has its own index
+        return
     if _state["state"] in ("building", "ready", "waiting"):
         return
     _state["state"] = "waiting"
@@ -120,15 +130,28 @@ def warm_up(species_ids):
 
 
 def ready():
+    if remote_model.enabled():
+        return remote_model.health()["species"] == "ready"
     return _index is not None
 
 
 def state():
+    if remote_model.enabled():
+        h = remote_model.health()
+        st = h["species"] if h["species"] not in ("idle", "waiting", "building") else "loading"
+        if h["state"] == "failed":
+            st = "failed"
+        return {"state": st, "error": h["error"] if st == "failed" else "", "n_refs": h["references"]}
     return dict(_state)
 
 
 def identify(image_path, key=None, top=3):
     """[{"id", "prob", "similarity"}] best first, or None when the index isn't ready."""
+    if remote_model.enabled():
+        if not length_ai.ready():               # asleep or starting: the page will retry
+            return None
+        found = remote_model.analyze(image_path, key or image_path).get("candidates") or []
+        return [{"id": c["id"], "prob": c["prob"], "similarity": None} for c in found[:top]] or None
     if _index is None:
         return None
     import numpy as np

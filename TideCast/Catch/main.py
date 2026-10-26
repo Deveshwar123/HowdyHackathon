@@ -376,6 +376,7 @@ def model_info():
     facts = length_ai.info() or {}
     ls = length_ai.load_state()
     return {"available": st["available"], "reason": st["reason"], "ready": length_ai.ready(),
+            "remote": length_ai.remote(),
             "load": ls["state"], "load_error": ls["error"],
             "species_finder": species_ai.state()["state"], "species_refs": species_ai.state()["n_refs"],
             "trained_on": facts.get("n_train"), "source": facts.get("source"),
