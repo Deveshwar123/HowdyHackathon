@@ -124,6 +124,30 @@ def load_state():
     return dict(_load)
 
 
+_emb_cache = {}
+
+
+def embed_file(image_path):
+    """DINOv2 features for any image (no caching); the model must be loaded."""
+    with _lock:
+        return _predictor.utils.embed_image(image_path)
+
+
+def embedding(image_path, key=None):
+    """DINOv2 features of a catch photo, cached per photo, shared by the length model and the
+    species finder so each photo goes through DINOv2 once. None while the model isn't loaded."""
+    key = key or image_path
+    if key in _emb_cache:
+        return _emb_cache[key]
+    if _predictor is None:
+        return None
+    feats = embed_file(image_path)
+    if len(_emb_cache) > 200:
+        _emb_cache.clear()
+    _emb_cache[key] = feats
+    return feats
+
+
 def predict_length_cm(image_path, key=None):
     """Learned length (cm) for a photo, cached per photo. None while the model isn't installed or
     is still loading; callers fall back to the knuckle method then."""
@@ -135,8 +159,9 @@ def predict_length_cm(image_path, key=None):
     if _predictor is None:
         warm_up()
         return None
+    feats = embedding(image_path, key=key)
     with _lock:
-        value = float(_predictor.predict_file(image_path))
+        value = float(_predictor.predict_features(feats))
     if not value > 0:
         return None
     _cache[key] = value

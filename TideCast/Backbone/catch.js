@@ -24,7 +24,7 @@
     banner: $('#banner'), species: $('#species'), sci: $('#sci'), rarity: $('#rarity'),
     len: $('#m-len'), len2: $('#m-len2'), wt: $('#m-wt'), wt2: $('#m-wt2'), band: $('#range-band'), dot: $('#range-dot'),
     rangeNote: $('#range-note'), pts: $('#m-pts'), brk: $('#m-break'), warn: $('#warnings'), facts: $('#facts'),
-    where: $('#where'), locate: $('#locate'), post: $('#post'), aiPill: $('#ai-pill'), lgK3: $('#lg-k3'), dragHint: $('#drag-hint'),
+    idNote: $('#id-note'), where: $('#where'), locate: $('#locate'), post: $('#post'), aiPill: $('#ai-pill'), lgK3: $('#lg-k3'), dragHint: $('#drag-hint'),
   };
 
   const api = async (path, body) => {
@@ -76,7 +76,7 @@
     el.aiPill.hidden = false;
     // Fully automatic needs the length model (measures) + Gemini (names the species).
     el.aiPill.innerHTML = S.model && S.ai ? '<i></i>Automatic measuring is on'
-      : S.model ? '<i></i>Length model on · pick the species yourself (no Gemini key)'
+      : S.model ? '<i></i>Length model on · it identifies and measures the fish from the photo'
       : S.ai ? `<i></i>AI is on · length model off, so mark your knuckles${S.modelWhy ? ` (${esc(S.modelWhy)})` : ''}`
       : '<i></i>AI measuring is off · you can mark points by hand';
     el.aiPill.classList.toggle('off', !S.model);
@@ -103,8 +103,9 @@
     const m = (d && d.model) || {};
     S.modelReady = !!m.ready;
     if (m.ready) {
-      if (el.banner.textContent.startsWith('Loading the length model')) banner(S.species ? '' : 'Choose the species and the length model measures it from the photo.');
+      if (el.banner.textContent.startsWith('Loading the length model')) banner('');
       if (S.species) remeasure(true);
+      else identifySpecies();
       return;
     }
     if (m.load === 'failed' || !m.available) {
@@ -229,7 +230,7 @@
     if (S.ai) analyze();
     else if (S.model) {
       // The length model measures from the photo; only the species is needed.
-      showResult(null, null, S.species ? '' : 'Choose the species and the length model measures it from the photo.');
+      showResult(null, null, 'Identifying the species…');
       modelGate();
     } else startManual('Mark the fish and your knuckles: four taps.');
   }
@@ -269,7 +270,7 @@
         const known = SPECIES.find((s) => s.name.toLowerCase() === d.analysis.species.toLowerCase());
         if (known) S.species = known.name;
       }
-      showResult(null, d.analysis, S.species ? '' : 'Choose the species and the length model measures it from the photo.');
+      showResult(null, d.analysis, S.species ? '' : 'Identifying the species…');
       modelGate();
       return;
     }
@@ -411,6 +412,47 @@
     } else remeasure(true);
   });
 
+  // ---- Species from the photo (length model features, no Gemini) -------------------------
+  let idTries = 0;
+  async function identifySpecies() {
+    const photo = S.photo;
+    if (!photo || S.species) return;
+    banner('Identifying the species…');
+    const d = await api('/api/catch/identify', { photo }).catch(() => ({ ok: false }));
+    if (photo !== S.photo || S.species) return;          // a new photo, or the angler already chose
+    if (!d.ok && d.loading && idTries++ < 120) {
+      if (idTries === 3) banner('Getting the species finder ready… the first time it studies every species’ photos, about 2 minutes. You can also pick the species yourself.');
+      setTimeout(identifySpecies, 2000);
+      return;
+    }
+    idTries = 0;
+    if (!d.ok) {
+      el.species.classList.add('need');
+      return banner('Choose the species and the length model measures it from the photo.');
+    }
+    S.species = d.species;
+    el.species.value = d.species;
+    el.species.classList.remove('need');
+    banner('');
+    showIdNote(d);
+    remeasure(true);
+  }
+  function showIdNote(d) {
+    const alts = (d.candidates || []).slice(1).filter((c) => c.prob >= 0.05);
+    const pct = Math.round(d.prob * 100);
+    el.idNote.innerHTML = (d.confident
+      ? `Identified from the photo: <b>${esc(d.species)}</b> (${pct}% match).`
+      : `Best guess from the photo: <b>${esc(d.species)}</b> (${pct}%). Check it.`)
+      + (alts.length ? ` Not it? ${alts.map((c) => `<button type="button" class="alt" data-sp="${esc(c.species)}">${esc(c.species)}</button>`).join('')}` : ' Not it? Pick it from the list.');
+    el.idNote.hidden = false;
+  }
+  el.idNote.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-sp]');
+    if (!b) return;
+    el.species.value = b.dataset.sp;
+    el.species.dispatchEvent(new Event('change'));
+  });
+
   // ---- Result panel ------------------------------------------------------------
   function showResult(result, analysis, message, manual) {
     if (S.mode !== 'manual') S.mode = 'result';
@@ -511,6 +553,7 @@
   el.species.addEventListener('change', () => {
     S.species = el.species.value;
     el.species.classList.remove('need');
+    el.idNote.hidden = true;
     banner('');
     if (S.model && !S.modelReady && !(S.spine.length && S.k4)) modelGate();
     else remeasure(true);
@@ -570,6 +613,8 @@
     S.spine = [];
     S.k4 = S.k3 = null;
     S.taps = [];
+    el.idNote.hidden = true;
+    el.species.value = '';
     clearTimeout(measureTimer);
     measureSeq++;
     el.handles.innerHTML = '';

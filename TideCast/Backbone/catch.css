@@ -157,3 +157,10 @@ label.btn { cursor: pointer; }
 .model-status.busy::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; vertical-align: -1px; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .ai-pill.off { cursor: pointer; }
+
+/* Species picked from the photo by the length model, with one-tap alternatives */
+.id-note { margin: -4px 0 0; color: var(--muted, #a9b4c2); line-height: 1.5; }
+.id-note b { color: inherit; font-weight: 600; }
+.id-note .alt { font: inherit; color: inherit; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 999px; padding: 1px 10px; margin: 2px 4px 0 0; cursor: pointer; }
+.id-note .alt:hover, .id-note .alt:focus-visible { border-color: var(--coral, #ff6b5e); outline: none; }

@@ -22,7 +22,10 @@ class FishLengthPredictor:
 
     def predict_file(self, image_path: str) -> float:
         """Predict fish length for a single image path."""
-        feats = self.utils.embed_image(image_path)
+        return self.predict_features(self.utils.embed_image(image_path))
+
+    def predict_features(self, feats) -> float:
+        """Predict fish length from an image's DINOv2 features (from utils.embed_image)."""
         X = self.feat_scaler.transform(feats.reshape(1, -1))
         y_scaled = self.automl.predict(X).reshape(-1, 1)
         y = self.len_scaler.inverse_transform(y_scaled)[0, 0]

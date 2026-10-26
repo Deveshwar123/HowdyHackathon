@@ -24,6 +24,7 @@ import db           # noqa: E402
 import length_ai    # noqa: E402
 import measure      # noqa: E402
 import scoring      # noqa: E402
+import species_ai   # noqa: E402
 import vision       # noqa: E402
 from fish_data import FISH_DB  # noqa: E402
 
@@ -43,8 +44,13 @@ MAX_PHOTO_BYTES = 6 * 1024 * 1024
 PHOTO_ID = re.compile(r"^[0-9a-f]{64}$")
 
 
+# species id (e.g. "striped-bass") -> name in fish_data ("Striped Bass")
+SPECIES_BY_ID = {scoring.slug(name): name for name in FISH_DB}
+
+
 def init():
     length_ai.warm_up()
+    species_ai.warm_up(SPECIES_BY_ID)
     db.init_db()
     os.makedirs(PHOTOS, exist_ok=True)
     _seed_samples()
@@ -224,6 +230,12 @@ def analyze(payload):
                          "or mark them yourself.", analysis=analysis, points=points, manual=True)
     key, info = measure.find_fish(data.get("species", "Unknown"))
     if not info:
+        found = _identify(payload.get("photo"))
+        if found and found[0]["prob"] >= species_ai.CONFIDENT:
+            key, info = measure.find_fish(found[0]["species"])
+            analysis["species"] = key
+            analysis["species_source"] = "length model"
+    if not info:
         return _err(400, "Species not recognized in our database. Pick it from the list.",
                     analysis=analysis, points=points, manual=True)
     try:
@@ -232,6 +244,36 @@ def analyze(payload):
         return _err(400, str(e), analysis=analysis, points=points, manual=True)
     result["confidence"] = data.get("confidence")
     return 200, {"ok": True, "analysis": analysis, "points": points, "result": result}
+
+
+def _identify(photo_id):
+    """The species finder's candidates for a photo ([{"species", "prob"}]), or None."""
+    try:
+        found = species_ai.identify(_photo_path(photo_id), key=photo_id)
+    except Exception as e:  # optional; never break a catch
+        print("  Species finder error:", e, flush=True)
+        return None
+    if not found:
+        return None
+    return [{"species": SPECIES_BY_ID[c["id"]], "prob": c["prob"]} for c in found]
+
+
+def identify(payload):
+    """POST /api/catch/identify {photo}: species from the photo with the length model's features."""
+    try:
+        _photo_size(payload.get("photo"))
+    except (FileNotFoundError, ValueError) as e:
+        return _err(400, str(e))
+    st = species_ai.state()
+    if not length_ai.status()["available"] or st["state"] in ("idle", "failed"):
+        return _err(503, "Identifying the species needs the length model.", manual=True,
+                    reason=st["error"] or length_ai.status()["reason"])
+    candidates = _identify(payload["photo"])
+    if not candidates:
+        return _err(503, "The species finder is still getting ready.", loading=True)
+    top = candidates[0]
+    return 200, {"ok": True, "species": top["species"], "prob": top["prob"],
+                 "confident": top["prob"] >= species_ai.CONFIDENT, "candidates": candidates}
 
 
 def measure_points(payload):
@@ -335,6 +377,7 @@ def model_info():
     ls = length_ai.load_state()
     return {"available": st["available"], "reason": st["reason"], "ready": length_ai.ready(),
             "load": ls["state"], "load_error": ls["error"],
+            "species_finder": species_ai.state()["state"], "species_refs": species_ai.state()["n_refs"],
             "trained_on": facts.get("n_train"), "source": facts.get("source"),
             "r2": m.get("r2"), "mae_cm": m.get("mae"), "n_test": m.get("n_test"),
             "n_train": m.get("n_train"), "mean_length_cm": m.get("mean_length"),

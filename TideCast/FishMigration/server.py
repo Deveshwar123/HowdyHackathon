@@ -344,6 +344,7 @@ CATCH_ROUTES = {
     "/api/catch/upload": catch.upload,
     "/api/catch/analyze": catch.analyze,
     "/api/catch/measure": catch.measure_points,
+    "/api/catch/identify": catch.identify,
     "/api/catch/submit": catch.submit,
     "/api/catch/key": catch.set_key,
     "/api/catch/model/install": catch.model_install,

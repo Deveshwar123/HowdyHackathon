@@ -2,3 +2,5 @@ fish.db
 photos/
 .env
 __pycache__/
+species_index.npz
+.species_flip.png

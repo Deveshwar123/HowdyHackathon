@@ -39,4 +39,11 @@ files are already in `fish_length/artifacts/`.
    --artifacts fish_length/artifacts`) to show measured accuracy on the home page instead of the
    labelled estimates.
 
+It also **identifies the species** without Gemini (`species_ai.py`): the same DINOv2 features are
+compared with every species' reference pictures (`Backbone/assets/species/` and `fish-photos/`, each
+also mirrored). The page picks the closest species and offers the next two as one-tap
+alternatives. The reference index is built once (about 2 minutes) and cached in
+`species_index.npz`. Adding more real photos of a species to `fish-photos/` (named like
+`largemouth-bass-2.jpg`) makes it more accurate.
+
 Without it, the catch app measures from the angler's knuckles exactly as before.
