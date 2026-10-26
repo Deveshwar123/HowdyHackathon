@@ -80,15 +80,19 @@
       : S.ai ? `<i></i>AI is on · length model off, so mark your knuckles${S.modelWhy ? ` (${esc(S.modelWhy)})` : ''}`
       : '<i></i>AI measuring is off · you can mark points by hand';
     el.aiPill.classList.toggle('off', !S.model);
-    $('#keybox').hidden = S.ai;
+    // On the hosted site the key and the model are the server owner's to set up, not visitors'.
+    $('#keybox').hidden = S.ai || S.public;
+    el.aiPill.title = S.public || S.model ? '' : 'Install the length model';
   };
   api('/api/stats').then((d) => {
     S.model = !!(d.model && d.model.available);
     S.modelReady = !!(d.model && d.model.ready);
     S.modelWhy = (d.model && d.model.reason) || '';
+    S.public = !!d.public;
+    if (S.public) S.modelWhy = '';               // install reasons mean nothing to a visitor
     showAi(!!d.ai);
     // The length model comes first: offer to install it before the knuckle / API-key options.
-    if (!S.model && store.get('tc-model-skip') !== '1') askModel();
+    if (!S.model && !S.public && store.get('tc-model-skip') !== '1') askModel();
   });
 
   // ---- Waiting for the length model to load (the first time it downloads ~4 GB) ----
@@ -129,8 +133,7 @@
     ask.status.className = `small model-status${kind ? ` ${kind}` : ''}`;
   }
   // Changed your mind? The status pill reopens the offer.
-  el.aiPill.addEventListener('click', () => { if (!S.model) askModel(); });
-  el.aiPill.title = 'Install the length model';
+  el.aiPill.addEventListener('click', () => { if (!S.model && !S.public) askModel(); });
   ask.skip.addEventListener('click', () => {
     store.set('tc-model-skip', '1');
     closeAsk();
@@ -354,7 +357,8 @@
       const d = { ArrowLeft: [-4, 0], ArrowRight: [4, 0], ArrowUp: [0, -4], ArrowDown: [0, 4] }[e.key];
       if (!d) return;
       e.preventDefault();
-      arr[i] = [arr[i][0] + d[0] * (e.shiftKey ? 4 : 1), arr[i][1] + d[1] * (e.shiftKey ? 4 : 1)];
+      const clamp = (v) => Math.max(0, Math.min(1000, v));   // stay on the photo
+      arr[i] = [clamp(arr[i][0] + d[0] * (e.shiftKey ? 4 : 1)), clamp(arr[i][1] + d[1] * (e.shiftKey ? 4 : 1))];
       place(h, arr[i]);
       drawLines(false);
       remeasure();

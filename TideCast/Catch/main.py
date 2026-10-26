@@ -27,6 +27,10 @@ import scoring      # noqa: E402
 import vision       # noqa: E402
 from fish_data import FISH_DB  # noqa: E402
 
+# Hosted for anyone (FishMigration/server.py with PUBLIC=1): installing the model and saving a
+# Gemini key are turned off, so the page shouldn't offer them.
+PUBLIC = os.environ.get("PUBLIC", "").lower() in ("1", "true", "yes")
+
 # The same photo can't be posted twice.
 ENABLE_DUPLICATE_CHECK = True
 
@@ -198,7 +202,12 @@ def analyze(payload):
             msg = ("Automatic measuring isn't set up on this server (no Gemini API key)." if reason == "no_key"
                    else "The Gemini API key was rejected.")
             return _err(503, msg + " You can mark the fish and your knuckles yourself.", manual=True)
+        if reason == "quota":
+            return _err(503, "The Gemini API key has hit its usage limit for now. Mark the fish and your "
+                             "knuckles yourself, or try again later.", manual=True)
         return _err(503, "The AI is busy. Try again shortly, or mark the points yourself.", manual=True)
+    except vision.BadAnswer as e:
+        return _err(502, str(e) + " You can mark the points yourself.", manual=True)
     except (FileNotFoundError, ValueError) as e:
         return _err(400, str(e))
 
@@ -286,7 +295,10 @@ def set_key(payload):
 def leaderboard(query):
     period = "week" if (query.get("period") or ["all"])[0] == "week" else "all"
     species = (query.get("species") or [""])[0].strip() or None
-    limit = max(1, min(100, int((query.get("limit") or ["50"])[0] or 50)))
+    try:
+        limit = max(1, min(100, int((query.get("limit") or ["50"])[0] or 50)))
+    except ValueError:
+        limit = 50
     rows = db.top_catches(limit=limit, species=species, period=period)
     for r in rows:
         r.pop("image_hash", None)
@@ -374,13 +386,13 @@ def model_install(_payload=None):
 
 
 def model_state(_query=None):
-    return 200, {"ok": True, "model": model_info(), "install": dict(_install)}
+    return 200, {"ok": True, "model": model_info(), "install": dict(_install), "public": PUBLIC}
 
 
 def stats(_query=None):
     s = db.stats()
     return 200, {"ok": True, **s, "species_known": len(FISH_DB), "ai": bool(vision.api_key()),
-                 "model": model_info()}
+                 "model": model_info(), "public": PUBLIC}
 
 
 def photo_bytes(name):

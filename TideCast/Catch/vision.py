@@ -84,6 +84,10 @@ class VisionUnavailable(Exception):
     pass
 
 
+class BadAnswer(ValueError):
+    """Gemini answered, but not with usable points."""
+
+
 def _point(desc):
     return {"type": "OBJECT", "description": desc, "required": ["x", "y"],
             "properties": {"x": {"type": "INTEGER", "description": "0=left, 1000=right"},
@@ -141,6 +145,7 @@ def call_gemini(jpeg_bytes):
         "generationConfig": {"responseMimeType": "application/json", "responseSchema": SCHEMA, "temperature": 0.0},
     }).encode()
     last_error = None
+    quota_hit = False
     for model in MODELS:
         for attempt in range(RETRIES_PER_MODEL):
             req = urllib.request.Request(f"{API_URL}/models/{model}:generateContent", data=body, method="POST",
@@ -151,18 +156,26 @@ def call_gemini(jpeg_bytes):
                 print("answered by:", resp.get("modelVersion", model))
                 return resp["candidates"][0]["content"]["parts"][0]["text"]
             except urllib.error.HTTPError as e:
-                last_error = f"{model}: HTTP {e.code} {e.read()[:200]!r}"
+                detail = e.read()[:400]
+                last_error = f"{model}: HTTP {e.code} {detail[:200]!r}"
                 print(last_error)
                 if e.code >= 500:                      # 5xx, including 503 overloaded
                     time.sleep(2 ** attempt)
                     continue
-                if e.code in (401, 403):               # bad key: no point trying other models
+                # A wrong key: Google answers 400 API_KEY_INVALID (or 401/403). No point trying
+                # other models.
+                if e.code in (401, 403) or (e.code == 400 and (b"API_KEY_INVALID" in detail
+                                                               or b"API key not valid" in detail)):
                     raise VisionUnavailable("bad_key")
+                if e.code == 429:
+                    quota_hit = True
                 break                                  # other 4xx (incl. 429 quota): next model
             except (urllib.error.URLError, TimeoutError, KeyError, IndexError) as e:
                 last_error = f"{model}: {e}"
                 print(last_error)
                 time.sleep(2 ** attempt)
+    if quota_hit:
+        raise VisionUnavailable("quota")
     raise VisionUnavailable(str(last_error))
 
 
@@ -194,5 +207,5 @@ def analyze_image(jpeg_bytes):
             data[key] = [int(data[key]["x"]), int(data[key]["y"])]
     except (ValueError, KeyError, TypeError):
         print("Bad JSON from model:", text[:500])
-        raise ValueError("The AI returned an unreadable answer. Please try again.")
+        raise BadAnswer("The AI returned an unreadable answer.")
     return data
