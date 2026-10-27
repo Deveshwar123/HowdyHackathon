@@ -24,14 +24,13 @@ window.TIDECAST_STATS = {
     { live: 'model_n_test', label: 'test photos it has never seen', note: 'Scored after training', modelStat: true },
     { live: 'species_known', label: 'species it can score', note: 'Each with its own length–weight curve' },
   ],
-  // Shown instead of `model` until the trained model's measured test results (metrics.json)
-  // are added. Values are ESTIMATES for a DINOv2 + AutoML length regressor and are labelled
-  // so on the page; edit them here.
+  // Shown instead of `model` until measured test results (metrics.json) exist. The model's
+  // authors published no test scores, so these are facts about the model, not accuracy claims.
   modelFallback: [
-    { value: 3.5, prefix: '±', decimals: 1, suffix: ' cm', label: 'average length error', note: 'Learned model (DINOv2 + AutoML), from the photo alone', estimate: true },
-    { value: 85, suffix: '%', label: 'of length variation explained (R²)', note: 'Expected on held-out catch photos', estimate: true },
-    { live: 'model_trained_on', label: 'fish photos it learned from', note: 'Lengths 10–80 cm · runs on this computer, no API key' },
-    { live: 'species_known', label: 'species it can score', note: 'Each with its own length–weight curve' },
+    { live: 'model_trained_on', label: 'fish photos it learned from', note: 'Lengths 10–80 cm, from the fishsizeproject length predictor (MIT)' },
+    { value: 1.1, decimals: 1, suffix: 'B', label: 'parameters in its image model', note: 'DINOv2 ViT-g/14, running right in your browser' },
+    { value: 2147, label: 'decision trees turn features into a length', note: 'XGBoost on 1,536 image features' },
+    { live: 'species_known', label: 'species it can identify and score', note: 'Each with its own length–weight curve' },
   ],
   sources: [
     { name: 'RBFF / Outdoor Foundation, 2025 Special Report on Fishing (2024 data)', url: 'https://www.nmma.org/press/article/25183' },

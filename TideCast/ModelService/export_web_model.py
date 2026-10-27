@@ -9,7 +9,8 @@ free RAM for the export. Run from the repo root:
     python3 TideCast/ModelService/export_web_model.py OUT_DIR
 
 Writes to OUT_DIR:
-  dinov2_vitg14_q4.onnx / dinov2_vitg14_int8.onnx   the browser model (4-bit and 8-bit weights)
+  dinov2_vitg14_q4.onnx                             the browser model, 4-bit weights (Standard)
+  dinov2_vitg14_q8.onnx + .onnx.data                the browser model, 8-bit weights (High precision)
   species-refs.bin, species-refs.json               the species index for the browser
   report.json                                       accuracy of each variant against the original
 """
@@ -31,8 +32,8 @@ sys.path.insert(0, CATCH)
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "web-model"))
 FP32_DIR = os.path.join(OUT, "fp32")
 FP32 = os.path.join(FP32_DIR, "dinov2_vitg14.onnx")
-VARIANTS = {"q4": os.path.join(OUT, "dinov2_vitg14_q4.onnx"),
-            "int8": os.path.join(OUT, "dinov2_vitg14_int8.onnx")}
+VARIANTS = {"q4": os.path.join(OUT, "dinov2_vitg14_q4.onnx"),     # Standard: one 690 MB file
+            "q8": os.path.join(OUT, "dinov2_vitg14_q8.onnx")}     # High precision: 16 MB + 1.2 GB .data
 os.makedirs(FP32_DIR, exist_ok=True)
 
 
@@ -56,33 +57,82 @@ def export_fp32():
     log("exported", FP32)
 
 
-def quantize():
+def quantize_nbits(src, out, bits, external):
+    """MatMulNBits (block 32, symmetric) one weight at a time, so the 4.4 GB model needs only a few
+    hundred MB of RAM (onnxruntime's own quantizer loads everything and runs out of memory).
+    Same packing as onnxruntime's quantizer, using its C++ kernel."""
     import onnx
-    if not os.path.exists(VARIANTS["q4"]):
-        try:
-            from onnxruntime.quantization.matmul_nbits_quantizer import MatMulNBitsQuantizer as Quantizer
-        except ImportError:  # onnxruntime < 1.20 calls it MatMul4BitsQuantizer
-            from onnxruntime.quantization.matmul_4bits_quantizer import MatMul4BitsQuantizer as Quantizer
-        log("4-bit weights (MatMulNBits, block 32)")
-        m = onnx.load(FP32, load_external_data=True)
-        q = Quantizer(m, block_size=32, is_symmetric=True)
-        q.process()
-        q.model.save_model_to_file(VARIANTS["q4"], use_external_data_format=False)
-        del m, q
+    from onnx import external_data_helper, helper, numpy_helper
+    from onnxruntime.capi._pybind_state import quantize_matmul_4bits, quantize_matmul_8bits
+    bs, base = 32, os.path.dirname(src)
+    data_f = open(out + ".data", "wb") if external else None   # q8 is past protobuf's 2 GB limit
+
+    def stash(arr, name):
+        t = numpy_helper.from_array(arr, name)
+        if data_f is None:
+            return t
+        raw = t.raw_data
+        off = data_f.tell()
+        data_f.write(raw)
+        external_data_helper.set_external_data(t, location=os.path.basename(out) + ".data", offset=off, length=len(raw))
+        t.ClearField("raw_data")
+        return t
+
+    m = onnx.load(src, load_external_data=False)
+    g = m.graph
+    inits = {t.name: t for t in g.initializer}
+    drop, add, nodes = set(), [], []
+    for node in g.node:
+        w_name = node.input[1] if node.op_type == "MatMul" and len(node.input) > 1 else None
+        t = inits.get(w_name)
+        if t is None or len(t.dims) != 2:
+            nodes.append(node)
+            continue
+        w = np.ascontiguousarray(numpy_helper.to_array(t, base_dir=base).astype(np.float32))
+        k, n = w.shape
+        kb = (k + bs - 1) // bs
+        packed = np.zeros((n, kb, bs * bits // 8), dtype=np.uint8)
+        scales = np.zeros((n, kb), dtype=np.float32)
+        zp = np.zeros((n, (kb + 1) // 2), dtype=np.uint8)
+        (quantize_matmul_8bits if bits == 8 else quantize_matmul_4bits)(packed, w, scales, zp, bs, n, k, True)
+        add += [stash(packed, w_name + f"_Q{bits}"), stash(scales.reshape(-1), w_name + "_scales")]
+        nodes.append(helper.make_node("MatMulNBits", [node.input[0], w_name + f"_Q{bits}", w_name + "_scales"],
+                                      list(node.output), name=(node.name or w_name) + f"_Q{bits}",
+                                      domain="com.microsoft", K=k, N=n, bits=bits, block_size=bs))
+        drop.add(w_name)
+        del w, packed, scales
         gc.collect()
-        log("q4", os.path.getsize(VARIANTS["q4"]) // 2**20, "MB")
-    if not os.path.exists(VARIANTS["int8"]):
-        from onnxruntime.quantization import QuantType, quantize_dynamic
-        log("8-bit weights (dynamic quantization)")
-        try:
-            quantize_dynamic(FP32, VARIANTS["int8"], weight_type=QuantType.QInt8, op_types_to_quantize=["MatMul"])
-        except Exception as e:  # the 4.4 GB input is past protobuf's 2 GB limit for some steps
-            log("retrying int8 with external data:", type(e).__name__, str(e)[:200])
-            tmp = os.path.join(FP32_DIR, "int8_ext.onnx")
-            quantize_dynamic(FP32, tmp, weight_type=QuantType.QInt8, op_types_to_quantize=["MatMul"],
-                             use_external_data_format=True)
-            onnx.save(onnx.load(tmp, load_external_data=True), VARIANTS["int8"])   # one file for the browser
-        log("int8", os.path.getsize(VARIANTS["int8"]) // 2**20, "MB")
+    keep = []
+    for t in g.initializer:
+        if t.name in drop:
+            continue
+        if t.data_location == onnx.TensorProto.EXTERNAL:
+            external_data_helper.load_external_data_for_tensor(t, base)
+            t.data_location = onnx.TensorProto.DEFAULT
+            del t.external_data[:]
+        keep.append(t)
+    del g.initializer[:]
+    g.initializer.extend(keep + add)
+    del g.node[:]
+    g.node.extend(nodes)
+    # DINOv2's optional token masking: the export leaves it as a bool input; fix it to False.
+    for i in list(g.input):
+        if i.name == "masks":
+            g.input.remove(i)
+            g.initializer.append(numpy_helper.from_array(np.array(False), "masks"))
+    if not any(o.domain == "com.microsoft" for o in m.opset_import):
+        m.opset_import.append(helper.make_opsetid("com.microsoft", 1))
+    if data_f:
+        data_f.close()
+    onnx.save_model(m, out)
+
+
+def quantize():
+    for k, (bits, external) in {"q4": (4, False), "q8": (8, True)}.items():
+        if not os.path.exists(VARIANTS[k]):
+            log(f"{bits}-bit weights (MatMulNBits, block 32)")
+            quantize_nbits(FP32, VARIANTS[k], bits, external)
+            log(k, os.path.getsize(VARIANTS[k]) // 2**20, "MB")
 
 
 def transform():
@@ -126,7 +176,8 @@ def evaluate():
     summary = {k: {"min_cos": min(v["cos"]), "mean_cos": float(np.mean(v["cos"])),
                    "median_dlen_cm": float(np.median(v["dlen_cm"])), "max_dlen_cm": max(v["dlen_cm"]),
                    "ms_per_image_cpu": float(np.median(v["ms"])),
-                   "size_mb": os.path.getsize(VARIANTS[k]) // 2**20} for k, v in report.items()}
+                   "size_mb": sum(os.path.getsize(f) for f in glob.glob(VARIANTS[k] + "*")) // 2**20}
+               for k, v in report.items()}
     summary["_lengths_cm"] = [round(x, 1) for x in lengths]
     del torch_model, pred
     gc.collect()
@@ -163,10 +214,8 @@ if __name__ == "__main__":
     export_fp32()
     quantize()
     summary, sessions = evaluate()
-    # 4-bit is half the download; use it unless it changes the length noticeably.
-    q4 = summary["q4"]
-    chosen = "q4" if q4["median_dlen_cm"] <= 1.0 and q4["min_cos"] >= 0.97 else "int8"
-    summary["chosen"] = chosen
+    # Visitors choose the size; the species index comes from the more precise model and works with both.
+    chosen = "q8"
     with open(os.path.join(OUT, "report.json"), "w") as f:
         json.dump(summary, f, indent=1)
     log("report", json.dumps({k: v for k, v in summary.items() if k != "_lengths_cm"}))

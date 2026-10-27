@@ -164,3 +164,17 @@ label.btn { cursor: pointer; }
 .id-note .alt { font: inherit; color: inherit; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 999px; padding: 1px 10px; margin: 2px 4px 0 0; cursor: pointer; }
 .id-note .alt:hover, .id-note .alt:focus-visible { border-color: var(--coral, #ff6b5e); outline: none; }
+
+/* The length model running in the browser: offer + download progress */
+.webmodel { display: grid; gap: 8px; padding: 14px; border-radius: 14px; background: rgba(127, 214, 207, .06); box-shadow: inset 0 0 0 1px rgba(127, 214, 207, .28); }
+.webmodel strong { font-weight: 500; }
+.webmodel .keyrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.wm-bar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.wm-bar i { display: block; height: 100%; width: 0; background: var(--good, #7fd6cf); transition: width .3s ease; }
+.wm-choices { display: grid; gap: 8px; }
+.wm-choice { display: grid; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 12px; cursor: pointer; color: inherit; font: inherit;
+  background: rgba(255, 255, 255, .04); border: 1px solid rgba(127, 214, 207, .3); }
+.wm-choice:hover, .wm-choice:focus-visible { border-color: var(--good, #7fd6cf); outline: none; background: rgba(127, 214, 207, .08); }
+.wm-choice b { font-weight: 600; }
+.wm-choice span { font-size: 12.5px; opacity: .75; }
+.wm-choice[disabled] { opacity: .5; cursor: default; }

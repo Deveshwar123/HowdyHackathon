@@ -129,6 +129,31 @@ def _learned_length(photo_id):
         return None
 
 
+# The length model can also run in the visitor's browser (Backbone/tidecast-model.js). Its file:
+# Two sizes of the same model, downloaded by the browser straight from Hugging Face (free model
+# hosting with a CDN). TC_WEB_MODEL_BASE=/model-files/ serves them through server.py instead.
+WEB_MODEL_BASE = os.environ.get("TC_WEB_MODEL_BASE", "https://huggingface.co/Deveshwar123/tidecast-fish-length/resolve/main/")
+WEB_MODELS = [
+    {"id": "q4", "label": "Standard", "url": WEB_MODEL_BASE + "dinov2_vitg14_q4.onnx", "bytes": 724255916,
+     "note": "4-bit weights · lengths within about 1 cm of the full model"},
+    {"id": "q8", "label": "High precision", "url": WEB_MODEL_BASE + "dinov2_vitg14_q8.onnx",
+     "data_url": WEB_MODEL_BASE + "dinov2_vitg14_q8.onnx.data", "bytes": 16491148 + 1274019840,
+     "note": "8-bit weights · practically identical to the full model"},
+]
+WEB_MODEL_ON = os.environ.get("TC_WEB_MODEL", "1") != "0"
+
+
+def _client_length(payload):
+    """Length (cm) measured by the browser's copy of the length model, when the server has none.
+    It comes from the browser, so it is only accepted within sane bounds (and capped at the
+    species' record length like every other measurement)."""
+    try:
+        v = float(payload.get("client_length_cm") or 0)
+    except (TypeError, ValueError):
+        return None
+    return v if WEB_MODEL_ON and 3.0 <= v <= 400.0 else None
+
+
 def _knuckle_result(key, payload, w, h):
     spine = [_point(p) for p in payload.get("spine") or []]
     if len(spine) < 2:
@@ -147,6 +172,10 @@ def _measure(payload, w, h):
     if not info:
         raise LookupError("Species not recognized in our database.")
     learned = _learned_length(payload.get("photo"))
+    source = "server"
+    if not learned:
+        learned = _client_length(payload)
+        source = "browser"
     if learned:
         knuckles = None
         try:
@@ -158,6 +187,7 @@ def _measure(payload, w, h):
         err = (m["mae"] / max(length, 1)) if m.get("mae") else measure.LENGTH_ERROR_FRAC
         result = measure.from_length(key, length, err)
         result["method"] = "model"
+        result["model_source"] = source
         result["model_length_cm"] = round(learned, 1)
         if knuckles:
             result["knuckle_length_cm"] = knuckles["length_cm"]
@@ -225,7 +255,7 @@ def analyze(payload):
               "k3": [data["knuckle3_left"], data["knuckle3_right"]]}
     if not data.get("fish_detected"):
         return _err(400, "No fish detected. Retake the photo.", analysis=analysis)
-    if not data.get("hand_detected") and not _learned_length(payload.get("photo")):
+    if not data.get("hand_detected") and not (_learned_length(payload.get("photo")) or _client_length(payload)):
         return _err(400, "Knuckles not visible. Retake so your knuckles face the camera, "
                          "or mark them yourself.", analysis=analysis, points=points, manual=True)
     key, info = measure.find_fish(data.get("species", "Unknown"))
@@ -377,6 +407,7 @@ def model_info():
     ls = length_ai.load_state()
     return {"available": st["available"], "reason": st["reason"], "ready": length_ai.ready(),
             "remote": length_ai.remote(),
+            "web": {"enabled": WEB_MODEL_ON, "variants": WEB_MODELS},
             "load": ls["state"], "load_error": ls["error"],
             "species_finder": species_ai.state()["state"], "species_refs": species_ai.state()["n_refs"],
             "trained_on": facts.get("n_train"), "source": facts.get("source"),
