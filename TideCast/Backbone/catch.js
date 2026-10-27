@@ -13,6 +13,7 @@
     species: '', spine: [], k4: null, k3: null, result: null,
     hand: store.get('tc-hand') || 'male', own: store.get('tc-own-cm') || '',
     ai: false, step: 0, taps: [], pos: null, busy: 0,
+    web: { ready: false, loading: false }, blob: null, clientLen: null, webCands: null,
   };
   const el = {
     drop: $('#drop'), file: $('#file'), file2: $('#file2'), photo: $('#photo'), box: $('#photo-box'), img: $('#photo-img'),
@@ -24,7 +25,8 @@
     banner: $('#banner'), species: $('#species'), sci: $('#sci'), rarity: $('#rarity'),
     len: $('#m-len'), len2: $('#m-len2'), wt: $('#m-wt'), wt2: $('#m-wt2'), band: $('#range-band'), dot: $('#range-dot'),
     rangeNote: $('#range-note'), pts: $('#m-pts'), brk: $('#m-break'), warn: $('#warnings'), facts: $('#facts'),
-    idNote: $('#id-note'), where: $('#where'), locate: $('#locate'), post: $('#post'), aiPill: $('#ai-pill'), lgK3: $('#lg-k3'), dragHint: $('#drag-hint'),
+    idNote: $('#id-note'), where: $('#where'),
+    webmodel: $('#webmodel'), wmBar: $('#wm-bar'), wmFill: $('#wm-fill'), wmMsg: $('#wm-msg'), wmLoad: $('#wm-load'), wmSkip: $('#wm-skip'), wmSize: $('#wm-size'), locate: $('#locate'), post: $('#post'), aiPill: $('#ai-pill'), lgK3: $('#lg-k3'), dragHint: $('#drag-hint'),
   };
 
   const api = async (path, body) => {
@@ -75,13 +77,15 @@
     S.ai = on;
     el.aiPill.hidden = false;
     // Fully automatic needs the length model (measures) + Gemini (names the species).
-    el.aiPill.innerHTML = S.model && S.ai ? '<i></i>Automatic measuring is on'
+    el.aiPill.innerHTML = S.web.ready ? `<i></i>Length model on, running in your browser · it identifies and measures the fish${S.ai ? ' (Gemini names the species)' : ''}`
+      : S.web.loading ? '<i></i>Loading the length model in your browser…'
+      : S.model && S.ai ? '<i></i>Automatic measuring is on'
       : S.model ? '<i></i>Length model on · it identifies and measures the fish from the photo'
       : S.ai ? `<i></i>AI is on · length model off, so mark your knuckles${S.modelWhy ? ` (${esc(S.modelWhy)})` : ''}`
       : '<i></i>AI measuring is off · you can mark points by hand';
-    el.aiPill.classList.toggle('off', !S.model);
+    el.aiPill.classList.toggle('off', !S.model && !S.web.ready);
     // On the hosted site the key and the model are the server owner's to set up, not visitors'.
-    $('#keybox').hidden = S.ai || S.public;
+    $('#keybox').hidden = S.ai || S.public || !el.webmodel.hidden;
     el.aiPill.title = S.public || S.model ? '' : 'Install the length model';
   };
   api('/api/stats').then((d) => {
@@ -91,6 +95,20 @@
     S.public = !!d.public;
     if (S.public) S.modelWhy = '';               // install reasons mean nothing to a visitor
     showAi(!!d.ai);
+    const web = d.model && d.model.web;
+    if (!S.model && web && web.enabled && window.TCModel && 'caches' in window && typeof WebAssembly === 'object') {
+      TCModel.config.modelUrl = web.url;
+      if (web.bytes) {
+        TCModel.config.modelBytes = web.bytes;
+        el.wmSize.textContent = `about ${Math.round(web.bytes / 1048576)} MB`;
+      }
+      // Already downloaded on this browser: start it straight away. Otherwise offer it.
+      TCModel.isCached().then((cached) => {
+        if (cached) loadWebModel();
+        else if (store.get('tc-web-skip') !== '1') { el.webmodel.hidden = false; showAi(S.ai); }
+      });
+      return;
+    }
     // The length model comes first: offer to install it before the knuckle / API-key options.
     if (!S.model && !S.public && store.get('tc-model-skip') !== '1') askModel();
   });
@@ -199,7 +217,10 @@
       const c = document.createElement('canvas');
       c.width = w;
       c.height = h;
-      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff';                       // a transparent PNG gets a white background, not black
+      g.fillRect(0, 0, w, h);
+      g.drawImage(img, 0, 0, w, h);
       const blob = await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.9));
       return { blob, w, h };
     } finally {
@@ -234,7 +255,10 @@
     const up = await api('/api/catch/upload', { image: await blobToDataURL(jpeg.blob) }).catch(() => ({ ok: false, error: 'Couldn’t reach the server.' }));
     if (!up.ok) return showSetupError(up.error);
     S.photo = up.photo;
-    if (S.ai) analyze();
+    S.blob = jpeg.blob;
+    if (S.web.ready) webMeasure();
+    else if (S.web.loading) showResult(null, null, 'Finishing loading the length model… your photo is measured as soon as it’s ready.');
+    else if (S.ai) analyze();
     else if (S.model) {
       // The length model measures from the photo; only the species is needed.
       showResult(null, null, 'Identifying the species…');
@@ -249,7 +273,7 @@
     let i = 0;
     setBusy('Analyzing your catch', msgs[0]);
     const tick = setInterval(() => { i = (i + 1) % msgs.length; el.statusSub.textContent = msgs[i]; }, 1600);
-    const d = await api('/api/catch/analyze', { photo: S.photo, ...handPayload() }).catch(() => ({ ok: false, error: 'Couldn’t reach the server.', manual: true }));
+    const d = await api('/api/catch/analyze', { photo: S.photo, ...handPayload(), client_length_cm: S.web.ready ? S.clientLen : undefined }).catch(() => ({ ok: false, error: 'Couldn’t reach the server.', manual: true }));
     clearInterval(tick);
     el.scan.hidden = true;
     setBusy(null);
@@ -269,6 +293,15 @@
       showResult(null, d.analysis, d.error);
       if (S.species) remeasure(true);
       return;
+    }
+    if (d.manual && S.web.ready) {
+      // Gemini couldn't help (no key, busy, or unsure): the browser model picks the species.
+      if (d.analysis && d.analysis.species && d.analysis.species !== 'Unknown') {
+        const known = SPECIES.find((s) => s.name.toLowerCase() === d.analysis.species.toLowerCase());
+        if (known) S.webCands = [{ species: known.name, prob: 1 }, ...(S.webCands || [])];
+      }
+      showResult(null, d.analysis, '');
+      return useWebSpecies();
     }
     if (d.manual && S.model) {
       // No AI for the species/points, but the length model measures from the photo alone:
@@ -419,6 +452,65 @@
     } else remeasure(true);
   });
 
+  // ---- The length model in the browser (tidecast-model.js) ------------------------------------
+  el.wmLoad.addEventListener('click', () => loadWebModel());
+  el.wmSkip.addEventListener('click', () => { store.set('tc-web-skip', '1'); el.webmodel.hidden = true; showAi(S.ai); });
+  async function loadWebModel() {
+    if (S.web.ready || S.web.loading) return;
+    S.web.loading = true;
+    el.webmodel.hidden = false;
+    el.wmLoad.disabled = true;
+    el.wmSkip.hidden = true;
+    el.wmBar.hidden = false;
+    el.wmMsg.className = 'small';
+    showAi(S.ai);
+    try {
+      await TCModel.load((f, msg) => { el.wmFill.style.width = `${Math.round(f * 100)}%`; el.wmMsg.textContent = msg; });
+      S.web.ready = true;
+      S.model = S.modelReady = true;
+      el.wmMsg.textContent = 'Ready. Upload a photo and the model measures it.';
+      setTimeout(() => { el.webmodel.hidden = true; showAi(S.ai); }, 1800);
+      if (S.photo && S.blob && !S.result && S.mode !== 'posted') webMeasure();   // a photo was waiting
+    } catch (e) {
+      el.wmMsg.className = 'small bad';
+      el.wmMsg.textContent = `The model couldn’t load: ${e.message} You can still mark the fish by hand.`;
+      el.wmLoad.disabled = false;
+      el.wmLoad.textContent = 'Try again';
+      el.wmSkip.hidden = false;
+      if (S.photo && S.mode === 'result' && !S.result) startManual('Mark the fish and your knuckles: four taps.');
+    }
+    S.web.loading = false;
+    showAi(S.ai);
+  }
+  async function webMeasure() {
+    const photo = S.photo;
+    showResult(null, null, 'Measuring in your browser…');
+    let r;
+    try {
+      r = await TCModel.analyze(S.blob);
+    } catch (e) {
+      return startManual(`The model couldn’t read this photo (${e.message}). Mark the fish and your knuckles instead: four taps.`);
+    }
+    if (photo !== S.photo) return;
+    S.clientLen = r.length_cm;
+    S.webCands = r.candidates.map((c) => ({ species: c.name, prob: c.prob }));
+    if (S.ai) return analyze();                  // Gemini names the species; the browser model measures
+    useWebSpecies();
+  }
+  function useWebSpecies() {
+    if (!S.webCands || !S.webCands.length) {
+      el.species.classList.add('need');
+      return banner('Choose the species and the length model measures it from the photo.');
+    }
+    const top = S.webCands[0];
+    S.species = top.species;
+    el.species.value = top.species;
+    el.species.classList.remove('need');
+    banner('');
+    showIdNote({ species: top.species, prob: top.prob, confident: top.prob >= 0.45, candidates: S.webCands });
+    remeasure(true);
+  }
+
   // ---- Species from the photo (length model features, no Gemini) -------------------------
   let idTries = 0;
   async function identifySpecies() {
@@ -524,7 +616,7 @@
     el.dot.style.opacity = '1';
     const conf = analysis && typeof analysis.confidence === 'number' ? ` · AI confidence ${Math.round(analysis.confidence * 100)}%` : '';
     const how = r.method === 'model'
-      ? `measured by the TideCast length model${r.knuckle_length_cm ? ` (your knuckles say ${(r.knuckle_length_cm / 2.54).toFixed(1)} in)` : ''}`
+      ? `measured by the TideCast length model${r.model_source === 'browser' ? ' in your browser' : ''}${r.knuckle_length_cm ? ` (your knuckles say ${(r.knuckle_length_cm / 2.54).toFixed(1)} in)` : ''}`
       : `measured against ${r.num_references} knuckle span${r.num_references > 1 ? 's' : ''}`;
     el.rangeNote.textContent = `±${Math.round(r.error_frac * 100)}% · ${how}${conf}`;
     // Knuckle sizes only matter when the knuckles are the ruler.
@@ -558,7 +650,8 @@
       }
     }, now ? 0 : 220);
   }
-  const payload = () => ({ photo: S.photo, species: S.species, spine: S.spine, k4: S.k4, k3: S.k3, ...handPayload() });
+  const payload = () => ({ photo: S.photo, species: S.species, spine: S.spine, k4: S.k4, k3: S.k3, ...handPayload(),
+    client_length_cm: S.web.ready ? S.clientLen : undefined });
 
   el.species.addEventListener('change', () => {
     S.species = el.species.value;
@@ -623,6 +716,7 @@
     S.spine = [];
     S.k4 = S.k3 = null;
     S.taps = [];
+    S.blob = S.clientLen = S.webCands = null;
     el.idNote.hidden = true;
     el.species.value = '';
     clearTimeout(measureTimer);

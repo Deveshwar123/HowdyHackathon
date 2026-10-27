@@ -75,7 +75,7 @@
 .sp-card { overflow: hidden; display: flex; flex-direction: column; animation: rise .6s var(--ease) both; transition: transform .3s var(--ease), box-shadow .3s; }
 .sp-card:hover { transform: translateY(-4px); box-shadow: 0 30px 70px rgba(0, 0, 0, .35), inset 0 0 0 1px color-mix(in srgb, var(--rc) 45%, transparent); }
 .sp-card .fish-art { aspect-ratio: 16 / 8; }
-.sp-card .rarity { position: absolute; left: 14px; top: 14px; }
+.sp-card .rarity { position: absolute; left: 14px; top: 14px; z-index: 2; background-color: rgba(4, 12, 20, .78); backdrop-filter: blur(6px); }
 .sp-body { padding: 16px 18px 18px; display: grid; gap: 10px; flex: 1; }
 .sp-body h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 25px; line-height: 1.05; }
 .sp-body .sci { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: 14px; margin-top: -6px; }

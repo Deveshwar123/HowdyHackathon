@@ -1,0 +1,21 @@
+# macOS / editors
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets and local data (keys go in TideCast/.env)
+.env
+TideCast/Catch/fish.db
+TideCast/Catch/photos/
+
+# Model exports (the browser model is hosted on Hugging Face, not in git)
+web-model/
+*.onnx
+*.onnx.data

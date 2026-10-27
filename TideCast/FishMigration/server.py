@@ -19,10 +19,12 @@ Serves the static atlas and implements the API routes the front end calls:
   (all catch routes live in ../Catch, the photo-measuring app)
   /data/<Species_name>.json          cached OBIS sample; fetched and saved on first use
 
-Standard library only. Run:  python3 server.py   (then open http://localhost:8765)
+Standard library only. Run from TideCast/:  python3 FishMigration/server.py
 
-The GFW API token is built in (BUILT_IN_GFW_TOKEN); the GFW_TOKEN environment
-variable overrides it.
+Settings (environment variables, or lines in TideCast/.env for the keys):
+  GFW_TOKEN       Global Fishing Watch API token (fishing-activity layers; free)
+  GEMINI_API_KEY  Gemini key (automatic species + point placing on Log a catch; free tier)
+  PORT, HOST      where to listen (default 127.0.0.1:8790); PUBLIC=1 for a hosted site
 """
 
 import json
@@ -83,17 +85,24 @@ def find_token(text):
     return match.group(0) if match else ""
 
 
-# Team Global Fishing Watch API token (application "Final", valid until 2036).
-# Built in so nobody needs a .env file; set the GFW_TOKEN environment variable to use another.
-BUILT_IN_GFW_TOKEN = (
-    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImtpZEtleSJ9."
-    "eyJkYXRhIjp7Im5hbWUiOiJGaW5hbCAiLCJ1c2VySWQiOjc0NzAxLCJhcHBsaWNhdGlvbk5hbWUiOiJGaW5hbCAiLCJpZCI6MTYzNzYsInR5cGUiOiJ1c2VyLWFwcGxpY2F0aW9uIn0sImlhdCI6MTc5Mjg3MDU1OSwiZXhwIjoyMTA4MjMwNTU5LCJhdWQiOiJnZnciLCJpc3MiOiJnZncifQ."
-    "b26cF2CkfpSU662B1x_08I__zNCwa4Y8gtErPBAe3X46pg7oGy-xZbl4AizRoECyrvdkYrgGjLKUy5xDYpg9UaSdnoJLDWM1Yzd8kFcpfF9sEITciv-qYXhPqdcaFNTUzwBjIuiYEiUU_k--ZTmolytO52eg126ZGUJCAoYA16G-5TtIpvSW-eNJqQKTa6ubrx5lI2LcA3Zm0J9hsekgdCnPpganvQlBtIeY0kb_pjbaTYu8Jv30UruMKRnWswBD25VNy83xgm_sXY5VBHXajoGbBUrY_JiwvA0GtV0_T4OY1Jk2h9Okqq_eoVD-8b2r96RphCQ03XFM9Mr4p1HifKhALG29KD2pYmq8haWlySDHq1smPA2P9PvZOcTybBYpSbJm7TwLyRmzCZ0SyBc7sR2tO9IXtBNaNguVejuYj4Hh0cIDQHYmZiE2nu_9PeTRS7rHPi9JRRvLbbD3QYHAO-v1rtoS-WVdQpHnU9O7exzTKy_3swCmyQyF263WOchF"
-)
+ENV_FILES = [os.path.join(os.path.dirname(ROOT), ".env"), os.path.join(ROOT, ".env")]
 
 
 def load_token():
-    return find_token(os.environ.get("GFW_TOKEN", "")) or BUILT_IN_GFW_TOKEN
+    """The Global Fishing Watch API token: the GFW_TOKEN environment variable, or a GFW_TOKEN=...
+    line in TideCast/.env (never committed). Free tokens: globalfishingwatch.org/our-apis/tokens.
+    Without one the atlas still works; only the fishing-activity layers are off."""
+    token = find_token(os.environ.get("GFW_TOKEN", ""))
+    for path in ENV_FILES:
+        if token:
+            break
+        try:
+            with open(path, encoding="utf-8") as f:
+                lines = [ln for ln in f if "GFW" in ln.upper()]
+            token = find_token("".join(lines))
+        except OSError:
+            pass
+    return token
 
 
 def check_token():
@@ -108,7 +117,7 @@ def check_token():
         print("  Global Fishing Watch: token accepted by GFW - fishing layers are live")
     elif status in (401, 403):
         print(f"  Global Fishing Watch: GFW REJECTED the token ({status}): {data[:200].decode(errors='ignore')}")
-        print("    -> create a new token at https://globalfishingwatch.org/our-apis/tokens and replace BUILT_IN_GFW_TOKEN in server.py")
+        print("    -> create a new token at https://globalfishingwatch.org/our-apis/tokens and set GFW_TOKEN (or put it in TideCast/.env)")
     else:
         print(f"  Global Fishing Watch: token check returned {status}: {data[:200].decode(errors='ignore')}")
 
@@ -423,6 +432,11 @@ class Handler(SimpleHTTPRequestHandler):
         # an old bundle would bring back behaviour that has since been changed.
         if not self.path.startswith("/api/"):
             self.send_header("Cache-Control", "no-cache, must-revalidate")
+        if urllib.parse.urlsplit(self.path).path == "/backbone/catch.html":
+            # Cross-origin isolation lets the in-browser length model use several CPU threads
+            # (WebAssembly needs SharedArrayBuffer). "credentialless" keeps CDN fonts and scripts working.
+            self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+            self.send_header("Cross-Origin-Embedder-Policy", "credentialless")
         super().end_headers()
 
     def send_bytes(self, status, ctype, body, cache_seconds=0):
@@ -650,8 +664,11 @@ if __name__ == "__main__":
     model = catch.length_ai.status()
     print("  Length model (automatic measuring): " + ("on" if model["available"] else
           "off - " + model["reason"] + "; anglers mark their knuckles instead (see Catch/README.md)"))
-    print("  Global Fishing Watch: checking the API token with GFW…")
-    threading.Thread(target=check_token, daemon=True).start()
+    if GFW_TOKEN:
+        print("  Global Fishing Watch: checking the API token with GFW…")
+        threading.Thread(target=check_token, daemon=True).start()
+    else:
+        print("  Global Fishing Watch: off - set GFW_TOKEN (free at globalfishingwatch.org/our-apis/tokens)")
     if not (PUBLIC or os.environ.get("NO_BROWSER")):
         threading.Timer(0.8, webbrowser.open, [url]).start()
     server.serve_forever()

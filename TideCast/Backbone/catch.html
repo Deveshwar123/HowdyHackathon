@@ -85,6 +85,15 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-5 5m5-5 5 5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Upload a photo
           </label>
+          <!-- The length model in the browser: offered when the server has no model of its own -->
+          <div class="webmodel" id="webmodel" hidden>
+            <strong>Measure automatically, right in your browser</strong>
+            <span class="muted small">TideCast's length model identifies the fish and measures it from the photo alone, no knuckles to mark.
+              It downloads once (<span id="wm-size">about 650 MB</span>) and stays saved in this browser. Best on a laptop or desktop.</span>
+            <div class="wm-bar" id="wm-bar" hidden><i id="wm-fill"></i></div>
+            <span class="small" id="wm-msg"></span>
+            <div class="keyrow"><button class="btn btn-primary" type="button" id="wm-load">Load the model</button><button class="btn btn-ghost" type="button" id="wm-skip">Not now</button></div>
+          </div>
           <!-- Shown when the server has no Gemini key -->
           <form class="keybox" id="keybox" hidden>
             <strong>Turn on automatic measuring</strong>
@@ -214,6 +223,7 @@
   <footer class="site-footer"><span>TideCast · Howdy Hack</span><span><a href="leaderboard.html">Leaderboard</a><a href="species.html">Species &amp; points</a><a href="/">Explore the waters</a></span></footer>
 
   <script src="site.js"></script>
+  <script src="tidecast-model.js"></script>
   <script src="catch.js"></script>
 </body>
 </html>
