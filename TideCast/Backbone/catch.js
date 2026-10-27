@@ -493,7 +493,7 @@
     const photo = S.photo;
     showResult(null, null, navigator.gpu
       ? 'Measuring in your browser…'
-      : 'Measuring in your browser… without a graphics chip this browser can take up to a minute, and the page may pause.');
+      : 'Measuring in your browser… without a graphics chip this browser can take up to a minute.');
     await new Promise((ok) => setTimeout(ok, 60));       // let the message paint before the model runs
     let r;
     try {

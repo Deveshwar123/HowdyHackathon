@@ -4,7 +4,8 @@
 // the same features are compared with every species' reference pictures (model/species-refs.*).
 //
 // The ONNX file is large, so it downloads once (with progress) and is kept in the browser's Cache
-// Storage; later visits load it from disk. Runs on WebGPU when the browser has it, else WebAssembly.
+// Storage; later visits load it from disk. Runs on WebGPU when the browser has it, else WebAssembly,
+// in a background worker so the page never freezes.
 //
 //   TCModel.config            where the files are
 //   TCModel.isCached(url?)    Promise<bool>  model already downloaded on this browser?
@@ -20,66 +21,45 @@
     modelBytes: cfg.modelBytes || 0,          // total download size, for the progress bar
     base: cfg.base || '/backbone/model/',
     cacheName: 'tidecast-model-v1',
+    worker: cfg.worker || '/backbone/tidecast-model-worker.js',
+    ortBase: cfg.ortBase || null,             // onnxruntime-web's dist/ folder; default the jsDelivr CDN
   };
-  let st = 'idle', session = null, reg = null, refs = null, loading = null, lastError = '';
+  let st = 'idle', backend = '', reg = null, refs = null, loading = null, lastError = '';
 
-  // ---- onnxruntime-web, loaded on demand from the CDN ---------------------------------------
-  function loadOrt() {
-    if (window.ort) return Promise.resolve(window.ort);
-    return new Promise((ok, fail) => {
-      const s = document.createElement('script');
-      s.src = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/ort.all.min.js`;
-      s.onload = () => {
-        window.ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
-        window.ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 4) : 1;
-        ok(window.ort);
-      };
-      s.onerror = () => fail(new Error('Couldn’t load the model runtime (onnxruntime-web).'));
-      document.head.appendChild(s);
-    });
-  }
-
-  // ---- the big file: Cache Storage first, else download with progress -----------------------
+  // ---- the network itself runs in a worker (tidecast-model-worker.js) ---------------------------
   async function cachedResponse(url = config.modelUrl) {
     try { return await (await caches.open(config.cacheName)).match(url); } catch { return null; }
   }
   async function isCached(url) { return !!(await cachedResponse(url)); }
 
-  // One file (url) from the cache, or downloaded with progress and cached. `done`/`total` let
-  // two files (a model and its separate weights) share one progress bar.
-  async function fetchFile(url, onProgress, prog) {
-    const hit = await cachedResponse(url);
-    if (hit) {
-      onProgress && onProgress(1, 'Loading the model from this browser…');
-      return new Uint8Array(await hit.arrayBuffer());
-    }
-    const r = await fetch(url);
-    if (!r.ok || !r.body) throw new Error(`Couldn’t download the model (HTTP ${r.status}).`);
-    const reader = r.body.getReader();
-    const chunks = [];
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      prog.done += value.length;
-      onProgress && onProgress(prog.total ? prog.done / prog.total : 0,
-        `Downloading the model… ${(prog.done / 1048576).toFixed(0)}${prog.total ? ` of ${(prog.total / 1048576).toFixed(0)}` : ''} MB`);
-    }
-    // A Blob (which the browser may keep on disk) instead of one more 1 GB copy in memory.
-    const blob = new Blob(chunks, { type: 'application/octet-stream' });
-    chunks.length = 0;
-    try {
-      const cache = await caches.open(config.cacheName);
-      await cache.put(url, new Response(blob, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(blob.size) } }));
-    } catch { /* storage full or private mode: it just downloads again next time */ }
-    return new Uint8Array(await blob.arrayBuffer());
+  let worker = null, nextId = 1;
+  const pending = new Map();
+  function startWorker(onProgress) {
+    return new Promise((ok, fail) => {
+      try {
+        worker = new Worker(config.worker);
+      } catch (e) {
+        return fail(new Error('This browser can’t run the model in the background.'));
+      }
+      worker.onerror = (e) => { e.preventDefault && e.preventDefault(); fail(new Error('Couldn’t start the model runtime.')); };
+      worker.onmessage = ({ data: m }) => {
+        if (m.type === 'progress') onProgress && onProgress(m.f, m.msg);
+        else if (m.type === 'ready') { backend = m.ep; ok(); }
+        else if (m.type === 'out' || (m.type === 'error' && m.id)) {
+          const p = pending.get(m.id);
+          pending.delete(m.id);
+          if (p) m.type === 'out' ? p.ok(m.emb) : p.fail(new Error(m.message));
+        } else if (m.type === 'error') fail(new Error(m.message));
+      };
+      worker.postMessage({ type: 'load', config: { ...config, ortVersion: ORT_VERSION } });
+    });
   }
-  async function fetchModel(onProgress) {
-    const prog = { done: 0, total: config.modelBytes || 0 };
-    const model = await fetchFile(config.modelUrl, onProgress, prog);
-    // Big models keep their weights in a separate file (ONNX "external data").
-    const data = config.dataUrl ? await fetchFile(config.dataUrl, onProgress, prog) : null;
-    return { model, data };
+  function runWorker(px) {
+    return new Promise((ok, fail) => {
+      const id = nextId++;
+      pending.set(id, { ok, fail });
+      worker.postMessage({ type: 'run', id, px }, [px.buffer]);
+    });
   }
 
   // ---- the regressor and the species index (small, from this site) --------------------------
@@ -185,22 +165,8 @@
     st = 'loading';
     loading = (async () => {
       try {
-        const ort = await loadOrt();
         const [r, s] = await Promise.all([loadRegressor(), loadRefs()]);
-        let files = await fetchModel(onProgress);
-        onProgress && onProgress(1, 'Starting the model…');
-        const opts = (ep) => ({
-          executionProviders: ep, graphOptimizationLevel: 'all',
-          ...(files.data ? { externalData: [{ path: config.dataUrl.split('/').pop(), data: files.data }] } : {}),
-        });
-        const eps = navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
-        try {
-          session = await ort.InferenceSession.create(files.model, opts(eps));
-        } catch (e) {
-          if (eps[0] !== 'webgpu') throw e;
-          session = await ort.InferenceSession.create(files.model, opts(['wasm']));
-        }
-        files = null;                              // the runtime has its own copy now
+        await startWorker(onProgress);
         reg = r;
         refs = s;
         st = 'ready';
@@ -208,6 +174,7 @@
         st = 'failed';
         lastError = e && e.message ? e.message : String(e);
         loading = null;
+        if (worker) { worker.terminate(); worker = null; }
         throw e;
       }
     })();
@@ -215,10 +182,7 @@
   }
 
   async function embed(blob) {
-    const ort = window.ort;
-    const input = new ort.Tensor('float32', await pixels(blob), [1, 3, 224, 224]);
-    const out = await session.run({ [session.inputNames[0]]: input });
-    return Float32Array.from(out[session.outputNames[0]].data);
+    return runWorker(await pixels(blob));
   }
 
   async function analyze(blob) {
@@ -229,14 +193,11 @@
   }
 
   window.TCModel = {
-    config, isCached, load, analyze, state: () => st, error: () => lastError,
+    config, isCached, load, analyze, state: () => st, error: () => lastError, backend: () => backend,
     // exposed for tests
     _predictLength: (emb) => loadRegressor().then((R) => predictLength(R, emb)),
     _identify: (emb) => loadRefs().then((R) => identify(R, emb)),
     _pixels: pixels,
-    _embedPixels: async (px) => {
-      const out = await session.run({ [session.inputNames[0]]: new window.ort.Tensor('float32', px, [1, 3, 224, 224]) });
-      return Float32Array.from(out[session.outputNames[0]].data);
-    },
+    _embedPixels: (px) => runWorker(new Float32Array(px)),
   };
 })();

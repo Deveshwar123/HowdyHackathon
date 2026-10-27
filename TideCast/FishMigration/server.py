@@ -437,7 +437,7 @@ class Handler(SimpleHTTPRequestHandler):
         # an old bundle would bring back behaviour that has since been changed.
         if not self.path.startswith(("/api/", "/model-files/")):
             self.send_header("Cache-Control", "no-cache, must-revalidate")
-        if urllib.parse.urlsplit(self.path).path == "/backbone/catch.html":
+        if urllib.parse.urlsplit(self.path).path in ("/backbone/catch.html", "/backbone/tidecast-model-worker.js"):
             # Cross-origin isolation lets the in-browser length model use several CPU threads
             # (WebAssembly needs SharedArrayBuffer). "credentialless" keeps CDN fonts and scripts working.
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
