@@ -59,10 +59,13 @@ def export_fp32():
 def quantize():
     import onnx
     if not os.path.exists(VARIANTS["q4"]):
-        from onnxruntime.quantization.matmul_nbits_quantizer import MatMulNBitsQuantizer
+        try:
+            from onnxruntime.quantization.matmul_nbits_quantizer import MatMulNBitsQuantizer as Quantizer
+        except ImportError:  # onnxruntime < 1.20 calls it MatMul4BitsQuantizer
+            from onnxruntime.quantization.matmul_4bits_quantizer import MatMul4BitsQuantizer as Quantizer
         log("4-bit weights (MatMulNBits, block 32)")
         m = onnx.load(FP32, load_external_data=True)
-        q = MatMulNBitsQuantizer(m, block_size=32, is_symmetric=True)
+        q = Quantizer(m, block_size=32, is_symmetric=True)
         q.process()
         q.model.save_model_to_file(VARIANTS["q4"], use_external_data_format=False)
         del m, q
