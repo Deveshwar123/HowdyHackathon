@@ -42,7 +42,7 @@ RFMO authorization, AIS turned off) and its last 12 months of events drawn on th
 
 From the `TideCast` folder: `python3 FishMigration/server.py` (or double-click `TideCast/start.command`).
 It picks a free port (8790 or the next free one), opens the TideCast landing page (`/backbone/`)
-and serves this atlas at the site root (`/`).
+and serves this atlas at `/explore` (the site root `/` redirects to the landing page).
 On macOS you can instead double-click `TideCast/start.command`. Needs Python 3 only, and
 an internet connection for live data. The Global Fishing Watch API token is built into `server.py`
 (this repo is private); the startup output says whether GFW accepts it.

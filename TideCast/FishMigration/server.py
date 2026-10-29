@@ -46,7 +46,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(ROOT), "Catch"))
 import main as catch  # noqa: E402
 import net  # noqa: E402  (trusted certificates for every outside call)
-# The TideCast landing page (TideCast/Backbone), served at /backbone/.
+# The TideCast landing page (TideCast/Backbone), served at /backbone/ (and / redirects there).
 BACKBONE = os.path.join(os.path.dirname(ROOT), "Backbone")
 PORT = int(os.environ.get("PORT", "8790"))
 # Hosting (Render etc.): HOST=0.0.0.0 to accept outside connections. PUBLIC=1 turns off the
@@ -420,6 +420,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def translate_path(self, path):
         url_path = urllib.parse.urlsplit(path).path
+        if url_path == "/explore":   # the fish atlas (this folder's index.html)
+            return os.path.join(ROOT, "index.html")
         if url_path == "/backbone" or url_path.startswith("/backbone/"):
             rel = urllib.parse.unquote(url_path[len("/backbone"):]).lstrip("/")
             full = os.path.normpath(os.path.join(BACKBONE, rel))
@@ -460,6 +462,11 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         url = urllib.parse.urlsplit(self.path)
         query = urllib.parse.parse_qs(url.query)
+        if url.path == "/":   # the site opens on the TideCast landing page, not the atlas
+            self.send_response(302)
+            self.send_header("Location", "/backbone/")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
         try:
             if url.path == "/species.js":   # the atlas guide + every TideCast species
                 with open(os.path.join(ROOT, "species.js"), "rb") as f:
@@ -687,9 +694,9 @@ if __name__ == "__main__":
         port += 1
     catch.init()
     server = ThreadingHTTPServer((HOST, port), Handler)
-    url = f"http://127.0.0.1:{port}/backbone/"   # TideCast landing page; "Explore" opens the atlas at /
+    url = f"http://127.0.0.1:{port}/backbone/"   # TideCast landing page; "Explore" opens the atlas at /explore
     print(f"TideCast running at {url}  (press Ctrl+C to stop)")
-    print(f"  Fish atlas (FishMigration): http://127.0.0.1:{port}/")
+    print(f"  Fish atlas (FishMigration): http://127.0.0.1:{port}/explore")
     print(f"  OBIS records per species query: {MAX_RECORDS:,}")
     print("  Catch measuring (Gemini): " + ("on" if catch.vision.api_key() else
           "off - set GEMINI_API_KEY (or put it in TideCast/.env); anglers can still mark points by hand"))

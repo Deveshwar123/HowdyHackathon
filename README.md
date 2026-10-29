@@ -4,7 +4,7 @@
 photo (species, length, weight and points, no scale or tape measure), puts it on a leaderboard,
 and lets you explore where fish live and where fishing happens on a 3D globe.
 
-**Live:** [tidecast-kdl9.onrender.com](https://tidecast-kdl9.onrender.com/backbone/)
+**Live:** [tidecast-kdl9.onrender.com](https://tidecast-kdl9.onrender.com/)
 (free hosting: the first visit after a quiet spell takes ~30 s to wake up)
 
 Built in a weekend at **Howdy Hack** by Deveshwar Vankeswaram, Mahish Suresh, Rugved Kamat and Sudhansai.

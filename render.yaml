@@ -1,5 +1,5 @@
 # Render Blueprint: deploys TideCast (landing page, fish atlas, catch app) as one web service.
-# On render.com: New > Blueprint > pick this repo. Landing page is at /backbone/, the atlas at /.
+# On render.com: New > Blueprint > pick this repo. Landing page is at /backbone/ (/ redirects there), the atlas at /explore.
 services:
   - type: web
     name: tidecast

@@ -40,4 +40,4 @@ water).
 - Nearby waters: © OpenStreetMap contributors (ODbL), via the Overpass API.
 - Water normal map: three.js examples (`waternormals.jpg`, MIT).
 
-Served at `/backbone/` by `../FishMigration/server.py`; *Explore the waters* links to the atlas at `/`.
+Served at `/backbone/` by `../FishMigration/server.py`; `/` redirects there, and *Explore the waters* links to the atlas at `/explore`.

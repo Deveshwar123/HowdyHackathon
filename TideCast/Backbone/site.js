@@ -3,7 +3,7 @@
 // without one (the atlas), it is added to the top of <body>.
 (() => {
   const LINKS = [
-    { href: '/', label: 'Explore', match: (p) => p === '/' || p === '/index.html' },
+    { href: '/explore', label: 'Explore', match: (p) => p === '/explore' || p === '/index.html' },
     { href: '/backbone/leaderboard.html', label: 'Leaderboard', match: (p) => p.endsWith('/leaderboard.html') },
     { href: '/backbone/species.html', label: 'Species', match: (p) => p.endsWith('/species.html') },
     { href: '/backbone/#program', label: 'How it works', id: 'nav-how', match: () => false },
