@@ -18,6 +18,7 @@ services:
       # Optional: turns on automatic catch measuring. Paste your key in the Render dashboard.
       - key: GEMINI_API_KEY
         sync: false
-      # Optional: overrides the Global Fishing Watch token built into server.py.
+      # Optional: turns on the atlas's fishing-activity layers. No token is built in; without one
+      # those layers stay off. Free token: globalfishingwatch.org/our-apis/tokens
       - key: GFW_TOKEN
         sync: false
