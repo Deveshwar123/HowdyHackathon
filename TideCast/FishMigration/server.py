@@ -235,8 +235,67 @@ def km_between(lat1, lon1, lat2, lon2):
     return 12742 * math.asin(math.sqrt(a))
 
 
+def nearest_unique(found):
+    """Nearest first, one entry per name, at most 8."""
+    seen, out = set(), []
+    for w in sorted(found, key=lambda w: w["km"]):
+        if w["name"] not in seen:
+            seen.add(w["name"])
+            out.append(w)
+    return out[:8]
+
+
 def nearby_waters(lat, lon):
-    """Named lakes, reservoirs and bays around a point, nearest first (tiny ponds left out)."""
+    """Named lakes, reservoirs and bays around a point, nearest first (tiny ponds left out).
+
+    Asks Overpass first. Render can't reach Overpass at all (issue #3), and Overpass is often
+    over capacity elsewhere, so on any Overpass failure the same OpenStreetMap waters come from
+    Photon, which answers in about a second."""
+    try:
+        return overpass_waters(lat, lon)
+    except (RuntimeError, ValueError) as e:
+        print(f"[water] Overpass failed ({str(e)[:120]}); using Photon", flush=True)
+        return photon_waters(lat, lon)
+
+
+PHOTON_OSM_TYPES = {"W": "way", "R": "relation"}
+NAME_KINDS = (("reservoir", "Reservoir"), ("lagoon", "Lagoon"), ("bay", "Bay"), ("lake", "Lake"),
+              ("pond", "Pond"), ("river", "River"))
+
+
+def photon_waters(lat, lon):
+    """nearby_waters() from Photon's reverse search, filtered to natural=water / natural=bay.
+    Photon has no water=lake/reservoir tag, so the kind is read from the name."""
+    for radius in (40, 120):  # km, the same two rings as the Overpass search
+        qs = urllib.parse.urlencode([("lat", lat), ("lon", lon), ("radius", radius), ("limit", 50),
+                                     ("osm_tag", "natural:water"), ("osm_tag", "natural:bay")])
+        found = []
+        for f in fetch_json(PHOTON_REVERSE + "?" + qs).get("features", []):
+            p, ext = f.get("properties", {}), f.get("properties", {}).get("extent")
+            if not p.get("name") or not ext or len(ext) != 4:
+                continue
+            west, north, east, south = ext  # Photon's extent order
+            size = km_between(south, west, north, east)
+            if size < 0.35:
+                continue
+            words = p["name"].lower().split()
+            kind = next((k for word, k in NAME_KINDS if word in words), "Bay" if p.get("osm_value") == "bay" else "Water")
+            clon, clat = f["geometry"]["coordinates"]
+            osm_type = PHOTON_OSM_TYPES.get(p.get("osm_type"))
+            found.append({
+                "name": p["name"], "kind": kind,
+                "water": "salt" if kind in ("Bay", "Lagoon") else "fresh",
+                "lat": clat, "lon": clon, "sizeKm": round(size, 2),
+                "bbox": [west, south, east, north],
+                "osm": f"{osm_type}/{p['osm_id']}" if osm_type and p.get("osm_id") else None,
+                "km": round(km_between(lat, lon, clat, clon), 1),
+            })
+        if found:
+            return nearest_unique(found)
+    return []
+
+
+def overpass_waters(lat, lon):
     for radius in (40000, 120000):
         q = (f'[out:json][timeout:40];(way["natural"="water"]["name"](around:{radius},{lat},{lon});'
              f'relation["natural"="water"]["name"](around:{radius},{lat},{lon});'
@@ -259,12 +318,7 @@ def nearby_waters(lat, lon):
                 "km": round(km_between(lat, lon, c["lat"], c["lon"]), 1),
             })
         if found:
-            seen, out = set(), []
-            for w in sorted(found, key=lambda w: w["km"]):
-                if w["name"] not in seen:
-                    seen.add(w["name"])
-                    out.append(w)
-            return out[:8]
+            return nearest_unique(found)
     return []
 
 
